@@ -1,0 +1,32 @@
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 30000
+
+  jpa:
+    show-sql: false
+
+logging:
+  level:
+    root: INFO
+    com.lul.shop: INFO
+
+app:
+  public-api-url: ${APP_PUBLIC_API_URL}
+
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+  jwt:
+    secret: ${JWT_SECRET}
+
+  s3:
+    bucket: ${S3_BUCKET}
+    region: ${AWS_REGION}
+    access-key: ${AWS_ACCESS_KEY:}
+    secret-key: ${AWS_SECRET_KEY:}
