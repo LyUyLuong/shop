@@ -1,9 +1,11 @@
 package com.lul.shop.catalog.presentation;
 
+import com.lul.shop.catalog.application.CatalogErrorCode;
 import com.lul.shop.catalog.application.CatalogService;
 import com.lul.shop.catalog.application.dto.CreateProductCommand;
 import com.lul.shop.catalog.application.dto.ProductResult;
 import com.lul.shop.catalog.application.dto.UpdateProductCommand;
+import com.lul.shop.catalog.application.dto.UploadProductImageCommand;
 import com.lul.shop.catalog.presentation.dto.request.CreateProductRequest;
 import com.lul.shop.catalog.presentation.dto.request.UpdateProductRequest;
 import com.lul.shop.catalog.presentation.dto.response.ProductResponse;
@@ -11,10 +13,14 @@ import com.lul.shop.shared.api.ApiResponse;
 import com.lul.shop.shared.api.PageResponse;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
+import com.lul.shop.shared.exception.BusinessException;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.util.UUID;
 
 @RestController
@@ -92,4 +98,31 @@ public class CatalogController {
     private PageQuery toPageQuery(int page, int size) {
         return new PageQuery(page, Math.min(size, MAX_PAGE_SIZE));
     }
+
+    @PostMapping(value = "/admin/products/{productId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<ProductResponse> uploadProductImage(@PathVariable UUID productId,
+                                                           @RequestPart("file") MultipartFile file) {
+        UploadProductImageCommand command = toUploadProductImageCommand(file);
+
+        ProductResult result = catalogService.uploadProductImage(productId, command);
+
+        return ApiResponse.ok(ProductResponse.from(result));
+    }
+
+    private UploadProductImageCommand toUploadProductImageCommand(MultipartFile file) {
+        try {
+            return new UploadProductImageCommand(
+                    file.getOriginalFilename(),
+                    file.getContentType(),
+                    file.getSize(),
+                    file.getInputStream()
+            );
+        } catch (IOException ex) {
+            throw new BusinessException(CatalogErrorCode.INVALID_PRODUCT_IMAGE, "image content cannot be read");
+        }
+    }
+
+
+
 }

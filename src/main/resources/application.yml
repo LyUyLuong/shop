@@ -31,6 +31,10 @@ spring:
         default-page-size: 20
         max-page-size: 100
         one-indexed-parameters: false
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
 
 server:
   port: ${SERVER_PORT:8081}
@@ -57,6 +61,8 @@ app:
     access-key: ${AWS_ACCESS_KEY:}
     secret-key: ${AWS_SECRET_KEY:}
     presigned-url-expiry: PT15M
+    product-image-prefix: ${S3_PRODUCT_IMAGE_PREFIX:products}
+    public-base-url: ${S3_PUBLIC_BASE_URL:}
 
 springdoc:
   api-docs:
