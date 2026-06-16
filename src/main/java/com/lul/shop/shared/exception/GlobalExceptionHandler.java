@@ -1,6 +1,5 @@
 package com.lul.shop.shared.exception;
 
-
 import com.lul.shop.shared.api.ApiResponse;
 import com.lul.shop.shared.api.ErrorInfo;
 import org.slf4j.Logger;
@@ -11,6 +10,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.List;
@@ -26,10 +26,10 @@ public class GlobalExceptionHandler {
 
         log.warn("Business exception: {} - {}", code.getCode(), ex.getMessage());
 
-        return ResponseEntity.status(code.getHttpStatus())
-                .body(ApiResponse.error(ErrorInfo.of(code.getCode(),ex.getMessage())));
+        return ResponseEntity
+                .status(code.getHttpStatus())
+                .body(ApiResponse.error(ErrorInfo.of(code.getCode(), ex.getMessage())));
     }
-
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
@@ -44,6 +44,15 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(code.getHttpStatus())
                 .body(ApiResponse.error(ErrorInfo.of(code.getCode(), code.getMessage(), details)));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgument(IllegalArgumentException ex) {
+        CommonErrorCode code = CommonErrorCode.INVALID_REQUEST;
+
+        return ResponseEntity
+                .status(code.getHttpStatus())
+                .body(ApiResponse.error(ErrorInfo.of(code.getCode(), ex.getMessage())));
     }
 
     @ExceptionHandler(AuthenticationException.class)
@@ -88,4 +97,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ErrorInfo.of(code.getCode(), code.getMessage())));
     }
 
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        CommonErrorCode code = CommonErrorCode.INVALID_REQUEST;
+
+        String message = "Invalid value for parameter '" + ex.getName()+"'";
+
+        return ResponseEntity
+                .status(code.getHttpStatus())
+                .body(ApiResponse.error(ErrorInfo.of(code.getCode(), message)));
+    }
 }
