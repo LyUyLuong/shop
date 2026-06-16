@@ -48,6 +48,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, WebConfig.API_V1 + "/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, WebConfig.API_V1 + "/products").permitAll()
+                        .requestMatchers(HttpMethod.GET, WebConfig.API_V1 + "/products/**").permitAll()
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .anyRequest().authenticated()
                 )
