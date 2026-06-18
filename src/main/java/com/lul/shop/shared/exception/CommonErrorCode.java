@@ -7,6 +7,8 @@ public enum CommonErrorCode implements ErrorCode {
     FORBIDDEN("COMMON_003", "Access is denied", 403),
     NOT_FOUND("COMMON_004", "Resource was not found", 404),
     INVALID_REQUEST("COMMON_005", "Invalid request", 400),
+    METHOD_NOT_ALLOWED("COMMON_006", "Request method is not supported", 405),
+
     INTERNAL_ERROR("COMMON_999", "Internal server error", 500);
 
     private final String code;

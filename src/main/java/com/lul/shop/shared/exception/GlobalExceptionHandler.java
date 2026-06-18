@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -119,5 +120,16 @@ public class GlobalExceptionHandler {
                         code.getCode(),
                         "Uploaded file is too large"
                 )));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethodNotSupport(HttpRequestMethodNotSupportedException ex) {
+
+        CommonErrorCode code = CommonErrorCode.METHOD_NOT_ALLOWED;
+
+        return ResponseEntity.status(code.getHttpStatus())
+                .body(ApiResponse.error(ErrorInfo.of(code.getCode(), code.getMessage())));
+
+
     }
 }
