@@ -5,7 +5,7 @@ import com.lul.shop.cart.application.dto.AddCartItemCommand;
 import com.lul.shop.cart.application.dto.CartItemResult;
 import com.lul.shop.cart.application.dto.CartResult;
 import com.lul.shop.cart.application.dto.UpdateCartItemCommand;
-import com.lul.shop.cart.application.port.CartProductCatalog;
+import com.lul.shop.cart.application.port.CatalogProductClient;
 import com.lul.shop.cart.domain.Cart;
 import com.lul.shop.cart.domain.CartItem;
 import com.lul.shop.cart.domain.CartRepository;
@@ -21,12 +21,12 @@ import java.util.UUID;
 public class CartService {
 
     private final CartRepository cartRepository;
-    private final CartProductCatalog cartProductCatalog;
+    private final CatalogProductClient catalogProductClient;
 
     public CartService(CartRepository cartRepository,
-                       CartProductCatalog cartProductCatalog) {
+                       CatalogProductClient catalogProductClient) {
         this.cartRepository = cartRepository;
-        this.cartProductCatalog = cartProductCatalog;
+        this.catalogProductClient = catalogProductClient;
     }
 
     @Transactional
@@ -43,7 +43,7 @@ public class CartService {
     public CartResult addItem(AddCartItemCommand command) {
         Objects.requireNonNull(command, "command must not be null");
 
-        if(!cartProductCatalog.existsActiveProduct(command.productId())) {
+        if(!catalogProductClient.existsActiveProduct(command.productId())) {
             throw new BusinessException(CartErrorCode.PRODUCT_NOT_AVAILABLE);
         }
 

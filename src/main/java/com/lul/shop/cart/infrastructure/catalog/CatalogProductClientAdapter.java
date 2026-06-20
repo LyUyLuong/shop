@@ -1,6 +1,6 @@
 package com.lul.shop.cart.infrastructure.catalog;
 
-import com.lul.shop.cart.application.port.CartProductCatalog;
+import com.lul.shop.cart.application.port.CatalogProductClient;
 import com.lul.shop.catalog.application.CatalogErrorCode;
 import com.lul.shop.catalog.application.CatalogService;
 import com.lul.shop.shared.exception.BusinessException;
@@ -9,11 +9,11 @@ import org.springframework.stereotype.Component;
 import java.util.UUID;
 
 @Component
-public class CatalogCartProductCatalog implements CartProductCatalog {
+public class CatalogProductClientAdapter implements CatalogProductClient {
 
     private final CatalogService catalogService;
 
-    public CatalogCartProductCatalog(CatalogService catalogService) {
+    public CatalogProductClientAdapter(CatalogService catalogService) {
         this.catalogService = catalogService;
     }
 

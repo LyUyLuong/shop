@@ -5,7 +5,7 @@ import com.lul.shop.auth.application.dto.AuthResult;
 import com.lul.shop.auth.application.dto.LoginCommand;
 import com.lul.shop.auth.application.dto.RegisterCommand;
 import com.lul.shop.auth.application.port.PasswordHasher;
-import com.lul.shop.auth.application.port.TokenProvider;
+import com.lul.shop.auth.application.port.AccessTokenIssuer;
 import com.lul.shop.auth.domain.User;
 import com.lul.shop.auth.domain.UserRepository;
 import com.lul.shop.shared.exception.BusinessException;
@@ -18,14 +18,14 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordHasher passwordHasher;
-    private final TokenProvider tokenProvider;
+    private final AccessTokenIssuer accessTokenIssuer;
 
     public AuthService(UserRepository userRepository,
                        PasswordHasher passwordHasher,
-                       TokenProvider tokenProvider) {
+                       AccessTokenIssuer accessTokenIssuer) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
-        this.tokenProvider = tokenProvider;
+        this.accessTokenIssuer = accessTokenIssuer;
     }
 
     @Transactional
@@ -44,7 +44,7 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
 
-        String token = tokenProvider.createAccessToken(savedUser);
+        String token = accessTokenIssuer.createAccessToken(savedUser);
 
         return toResult(savedUser,token);
     }
@@ -62,7 +62,7 @@ public class AuthService {
             throw new BusinessException(AuthErrorCode.USER_DISABLED);
         }
 
-        String accessToken = tokenProvider.createAccessToken(user);
+        String accessToken = accessTokenIssuer.createAccessToken(user);
 
         return toResult(user, accessToken);
     }

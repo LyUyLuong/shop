@@ -1,6 +1,6 @@
 package com.lul.shop.auth.infrastructure.security;
 
-import com.lul.shop.auth.application.port.TokenProvider;
+import com.lul.shop.auth.application.port.AccessTokenIssuer;
 import com.lul.shop.auth.domain.User;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.JwsHeader;
@@ -15,15 +15,15 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
-public class JwtTokenProvider implements TokenProvider {
+public class JwtAccessTokenIssuer implements AccessTokenIssuer {
 
     private final JwtProperties properties;
     private final JwtEncoder jwtEncoder;
     private final Clock clock;
 
-    public JwtTokenProvider(JwtProperties properties,
-                            JwtEncoder jwtEncoder,
-                            Clock clock) {
+    public JwtAccessTokenIssuer(JwtProperties properties,
+                                JwtEncoder jwtEncoder,
+                                Clock clock) {
         this.properties = properties;
         this.jwtEncoder = jwtEncoder;
         this.clock = clock;
