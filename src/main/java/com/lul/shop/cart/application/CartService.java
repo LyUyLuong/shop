@@ -93,6 +93,17 @@ public class CartService {
         return toResult(savedCart);
     }
 
+    @Transactional
+    public void clearCart(UUID userId) {
+        Objects.requireNonNull(userId, "userId must not be null");
+
+        Cart cart = getExistingCartOrThrow(userId);
+
+        cart.clear();
+
+        cartRepository.save(cart);
+    }
+
     private Cart getExistingCartOrThrow(UUID userId) {
         return cartRepository.findByUserId(userId)
                 .orElseThrow(() -> new BusinessException(CartErrorCode.CART_NOT_FOUND));

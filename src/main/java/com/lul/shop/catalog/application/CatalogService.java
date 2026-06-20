@@ -160,6 +160,12 @@ public class CatalogService {
     }
 
 
+    @Transactional
+    public boolean decreaseStockIfEnough(UUID productId, int quantity) {
+        return productRepository.decreaseStockIfEnough(productId, quantity);
+    }
+
+
     private void validateProductImage(UploadProductImageCommand command) {
 
         if (command == null) {

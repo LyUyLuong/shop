@@ -98,6 +98,11 @@ public class Cart {
         return items.removeIf(item -> item.hasId(itemId));
     }
 
+    public void clear(){
+        items.clear();
+    }
+
+
     private Optional<CartItem> findItemByProductId(UUID productId) {
         return items.stream()
                 .filter(item -> item.hasProduct(productId))

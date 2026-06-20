@@ -1,0 +1,132 @@
+package com.lul.shop.ordering.application;
+
+
+import com.lul.shop.ordering.application.dto.OrderItemResult;
+import com.lul.shop.ordering.application.dto.OrderResult;
+import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
+import com.lul.shop.ordering.application.port.*;
+import com.lul.shop.ordering.domain.Order;
+import com.lul.shop.ordering.domain.OrderItem;
+import com.lul.shop.ordering.domain.OrderRepository;
+import com.lul.shop.shared.exception.BusinessException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+
+@Service
+@Transactional(readOnly = true)
+public class OrderingService {
+
+    private final OrderRepository orderRepository;
+    private final CartCheckoutClient cartCheckoutClient;
+    private final ProductCheckoutClient productCheckoutClient;
+
+
+    public OrderingService(OrderRepository orderRepository,
+                           CartCheckoutClient cartCheckoutClient,
+                           ProductCheckoutClient productCheckoutClient) {
+        this.orderRepository = orderRepository;
+        this.cartCheckoutClient = cartCheckoutClient;
+        this.productCheckoutClient = productCheckoutClient;
+    }
+
+    @Transactional
+    public OrderResult placeOrder(PlaceOrderCommand command) {
+
+        Objects.requireNonNull(command, "command must not be null");
+
+        CartSnapshot cart = cartCheckoutClient.getCart(command.userId());
+
+        if (cart.isEmpty()) {
+            throw new BusinessException(OrderingErrorCode.CART_EMPTY);
+        }
+
+        List<OrderItem> orderItems = cart.items().stream().map(this::createOrderItem).toList();
+
+        Order order = Order.create(command.userId(),orderItems);
+
+        Order savedOrder = orderRepository.save(order);
+
+        cartCheckoutClient.clearCart(command.userId());
+
+        return toResult(savedOrder);
+    }
+
+    private OrderItem createOrderItem(CartItemSnapshot cartItem) {
+
+        ProductSnapshot product = productCheckoutClient.getActiveProduct(cartItem.productId());
+
+        boolean stockDecreased = productCheckoutClient.decreaseStockIfEnough(
+                product.id(),
+                cartItem.quantity()
+        );
+
+        if (!stockDecreased) {
+            throw new BusinessException(OrderingErrorCode.INSUFFICIENT_STOCK);
+        }
+
+        return OrderItem.create(
+                product.id(),
+                product.sku(),
+                product.name(),
+                product.price(),
+                cartItem.quantity()
+        );
+
+    }
+
+
+    public List<OrderResult> getOrders(UUID userId) {
+        Objects.requireNonNull(userId, "userId must not be null");
+
+        return orderRepository.findByUserId(userId)
+                .stream()
+                .map(this::toResult)
+                .toList();
+    }
+
+    public OrderResult getOrder(UUID userId, UUID orderId) {
+        Objects.requireNonNull(userId, "userId must not be null");
+        Objects.requireNonNull(orderId, "orderId must not be null");
+
+        Order order = orderRepository.findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> new BusinessException(OrderingErrorCode.ORDER_NOT_FOUND));
+
+        return toResult(order);
+    }
+
+    private OrderResult toResult(Order order) {
+        return new OrderResult(
+                order.getId(),
+                order.getUserId(),
+                order.getStatus(),
+                order.getTotalAmount(),
+                order.getItems()
+                        .stream()
+                        .map(this::toItemResult)
+                        .toList(),
+                order.getCreatedAt(),
+                order.getUpdatedAt()
+        );
+    }
+
+    private OrderItemResult toItemResult(OrderItem item) {
+        return new OrderItemResult(
+                item.getId(),
+                item.getProductId(),
+                item.getProductSku(),
+                item.getProductName(),
+                item.getUnitPrice(),
+                item.getQuantity(),
+                item.getLineTotal()
+        );
+    }
+
+
+
+
+
+}
