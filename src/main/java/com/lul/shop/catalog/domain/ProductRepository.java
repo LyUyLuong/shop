@@ -16,6 +16,8 @@ public interface ProductRepository {
 
     boolean existsOtherProductWithSku(String sku, UUID currentProductId);
 
+    boolean decreaseStockIfEnough(UUID productId, int quantity);
+
     Product save(Product product);
 
     PageResult<Product> search(ProductSearchCriteria criteria, PageQuery pageQuery);

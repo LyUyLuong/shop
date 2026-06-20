@@ -3,6 +3,7 @@ package com.lul.shop.catalog.infrastructure.persistence.repository;
 import com.lul.shop.catalog.domain.Product;
 import com.lul.shop.catalog.domain.ProductRepository;
 import com.lul.shop.catalog.domain.ProductSearchCriteria;
+import com.lul.shop.catalog.domain.ProductStatus;
 import com.lul.shop.catalog.infrastructure.persistence.entity.ProductJpaEntity;
 import com.lul.shop.catalog.infrastructure.persistence.mapper.ProductMapper;
 import com.lul.shop.shared.domain.PageQuery;
@@ -58,6 +59,24 @@ public class ProductRepositoryImpl implements ProductRepository {
         return normalizeSku(sku)
                 .map(normalizedSku -> productJpaRepository.existsOtherProductWithSku(normalizedSku, currentProductId))
                 .orElse(false);
+    }
+
+    @Override
+    @Transactional
+    public boolean decreaseStockIfEnough(UUID productId, int quantity) {
+        Objects.requireNonNull(productId, "productId must not be null");
+
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("quantity must be greater than 0");
+        }
+
+        int affectedRows = productJpaRepository.decreaseStockIfEnough(
+                productId,
+                quantity,
+                ProductStatus.ACTIVE
+        );
+
+        return affectedRows == 1;
     }
 
     @Override
