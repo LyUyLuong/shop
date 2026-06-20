@@ -5,12 +5,13 @@ import com.lul.shop.auth.domain.UserRole;
 
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 public record AuthResponse(
         UUID userId,
         String email,
         String name,
-        Set<UserRole> roles,
+        Set<String> roles,
         String accessToken,
         String tokenType
 ) {
@@ -20,7 +21,7 @@ public record AuthResponse(
                 result.userId(),
                 result.email(),
                 result.name(),
-                result.roles(),
+                result.roles().stream().map(Enum::name).collect(Collectors.toSet()),
                 result.accessToken(),
                 "Bearer"
         );

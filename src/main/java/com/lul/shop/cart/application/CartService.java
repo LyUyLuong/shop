@@ -41,6 +41,7 @@ public class CartService {
 
     @Transactional
     public CartResult addItem(AddCartItemCommand command) {
+        Objects.requireNonNull(command, "command must not be null");
 
         if(!cartProductCatalog.existsActiveProduct(command.productId())) {
             throw new BusinessException(CartErrorCode.PRODUCT_NOT_AVAILABLE);
@@ -59,6 +60,8 @@ public class CartService {
 
     @Transactional
     public CartResult updateItem(UpdateCartItemCommand command) {
+        Objects.requireNonNull(command, "command must not be null");
+
         Cart cart = getExistingCartOrThrow(command.userId());
 
         boolean updated = cart.updateItemQuantity(command.itemId(), command.quantity());
@@ -92,7 +95,7 @@ public class CartService {
 
     private Cart getExistingCartOrThrow(UUID userId) {
         return cartRepository.findByUserId(userId)
-                .orElseThrow(() -> new BusinessException(CartErrorCode.CART_ITEM_NOT_FOUND));
+                .orElseThrow(() -> new BusinessException(CartErrorCode.CART_NOT_FOUND));
     }
 
     private CartResult toResult(Cart cart) {
