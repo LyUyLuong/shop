@@ -1,11 +1,11 @@
 package com.lul.shop.cart.application;
 
-
 import com.lul.shop.cart.application.dto.AddCartItemCommand;
 import com.lul.shop.cart.application.dto.CartItemResult;
 import com.lul.shop.cart.application.dto.CartResult;
 import com.lul.shop.cart.application.dto.UpdateCartItemCommand;
 import com.lul.shop.cart.application.port.CatalogProductClient;
+import com.lul.shop.cart.application.port.CartProductSnapshot;
 import com.lul.shop.cart.domain.Cart;
 import com.lul.shop.cart.domain.CartItem;
 import com.lul.shop.cart.domain.CartRepository;
@@ -43,19 +43,23 @@ public class CartService {
     public CartResult addItem(AddCartItemCommand command) {
         Objects.requireNonNull(command, "command must not be null");
 
-        if(!catalogProductClient.existsActiveProduct(command.productId())) {
-            throw new BusinessException(CartErrorCode.PRODUCT_NOT_AVAILABLE);
-        }
+        CartProductSnapshot product = getActiveProductOrThrow(command.productId());
 
         Cart cart = cartRepository.findByUserId(command.userId())
                 .orElseGet(() -> Cart.create(command.userId()));
+
+        ensureStockIsEnoughAfterAdd(
+                cart,
+                command.productId(),
+                command.quantity(),
+                product.stockQuantity()
+        );
 
         cart.addItem(command.productId(), command.quantity());
 
         Cart savedCart = cartRepository.save(cart);
 
         return toResult(savedCart);
-
     }
 
     @Transactional
@@ -64,11 +68,13 @@ public class CartService {
 
         Cart cart = getExistingCartOrThrow(command.userId());
 
-        boolean updated = cart.updateItemQuantity(command.itemId(), command.quantity());
+        CartItem existingItem = getExistingItemOrThrow(cart, command.itemId());
 
-        if (!updated) {
-            throw new BusinessException(CartErrorCode.CART_ITEM_NOT_FOUND);
-        }
+        CartProductSnapshot product = getActiveProductOrThrow(existingItem.getProductId());
+
+        ensureStockIsEnough(command.quantity(), product.stockQuantity());
+
+        cart.updateItemQuantity(command.itemId(), command.quantity());
 
         Cart savedCart = cartRepository.save(cart);
 
@@ -109,6 +115,43 @@ public class CartService {
                 .orElseThrow(() -> new BusinessException(CartErrorCode.CART_NOT_FOUND));
     }
 
+    private CartItem getExistingItemOrThrow(Cart cart, UUID itemId) {
+        return cart.getItems()
+                .stream()
+                .filter(item -> item.hasId(itemId))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(CartErrorCode.CART_ITEM_NOT_FOUND));
+    }
+
+    private CartProductSnapshot getActiveProductOrThrow(UUID productId) {
+        return catalogProductClient.findActiveProduct(productId)
+                .orElseThrow(() -> new BusinessException(CartErrorCode.PRODUCT_NOT_AVAILABLE));
+    }
+
+    private int currentProductQuantity(Cart cart, UUID productId) {
+        return cart.getItems()
+                .stream()
+                .filter(item -> item.hasProduct(productId))
+                .mapToInt(CartItem::getQuantity)
+                .findFirst()
+                .orElse(0);
+    }
+
+    private void ensureStockIsEnough(int requestedQuantity, int stockQuantity) {
+        if (requestedQuantity > stockQuantity) {
+            throw new BusinessException(CartErrorCode.INSUFFICIENT_STOCK);
+        }
+    }
+
+    private void ensureStockIsEnoughAfterAdd(Cart cart,
+                                             UUID productId,
+                                             int quantityToAdd,
+                                             int stockQuantity) {
+        int quantityAfterAdd = currentProductQuantity(cart, productId) + quantityToAdd;
+
+        ensureStockIsEnough(quantityAfterAdd, stockQuantity);
+    }
+
     private CartResult toResult(Cart cart) {
         return new CartResult(
                 cart.getId(),
@@ -129,5 +172,4 @@ public class CartService {
                 item.getQuantity()
         );
     }
-
 }

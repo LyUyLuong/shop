@@ -1,8 +1,9 @@
 package com.lul.shop.cart.application.port;
 
+import java.util.Optional;
 import java.util.UUID;
 
 public interface CatalogProductClient {
 
-    boolean existsActiveProduct(UUID productId);
+    Optional<CartProductSnapshot> findActiveProduct(UUID productId);
 }
