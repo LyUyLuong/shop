@@ -35,14 +35,15 @@ public class PaymentService {
     public PaymentResult payMock(PayOrderCommand command) {
         Objects.requireNonNull(command, "command must not be null");
 
-        if (paymentRepository.existsByOrderId(command.orderId())) {
-            throw new BusinessException(PaymentErrorCode.PAYMENT_ALREADY_EXISTS);
-        }
 
         PayableOrderSnapshot order = payableOrderClient.getPayableOrder(
                 command.userId(),
                 command.orderId()
         );
+
+        if (paymentRepository.existsByOrderId(command.orderId())) {
+            throw new BusinessException(PaymentErrorCode.PAYMENT_ALREADY_EXISTS);
+        }
 
         if (!order.payable()) {
             throw new BusinessException(PaymentErrorCode.ORDER_NOT_PAYABLE);

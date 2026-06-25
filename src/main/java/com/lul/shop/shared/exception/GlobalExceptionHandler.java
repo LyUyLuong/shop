@@ -5,6 +5,7 @@ import com.lul.shop.shared.api.ErrorInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -141,4 +142,17 @@ public class GlobalExceptionHandler {
                 .status(code.getHttpStatus())
                 .body(ApiResponse.error(ErrorInfo.of(code.getCode(), ex.getMessage())));
     }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMessageNotReadable(HttpMessageNotReadableException ex) {
+        CommonErrorCode code = CommonErrorCode.INVALID_REQUEST;
+
+        return ResponseEntity
+                .status(code.getHttpStatus())
+                .body(ApiResponse.error(ErrorInfo.of(
+                        code.getCode(),
+                        "Malformed request body or invalid field type"
+                )));
+    }
+
 }
