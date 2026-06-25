@@ -4,8 +4,8 @@ import com.lul.shop.cart.application.dto.AddCartItemCommand;
 import com.lul.shop.cart.application.dto.CartItemResult;
 import com.lul.shop.cart.application.dto.CartResult;
 import com.lul.shop.cart.application.dto.UpdateCartItemCommand;
-import com.lul.shop.cart.application.port.CatalogProductClient;
-import com.lul.shop.cart.application.port.CartProductSnapshot;
+import com.lul.shop.cart.application.port.ProductAvailabilityClient;
+import com.lul.shop.cart.application.port.ProductAvailabilitySnapshot;
 import com.lul.shop.cart.domain.Cart;
 import com.lul.shop.cart.domain.CartItem;
 import com.lul.shop.cart.domain.CartRepository;
@@ -21,12 +21,12 @@ import java.util.UUID;
 public class CartService {
 
     private final CartRepository cartRepository;
-    private final CatalogProductClient catalogProductClient;
+    private final ProductAvailabilityClient productAvailabilityClient;
 
     public CartService(CartRepository cartRepository,
-                       CatalogProductClient catalogProductClient) {
+                       ProductAvailabilityClient productAvailabilityClient) {
         this.cartRepository = cartRepository;
-        this.catalogProductClient = catalogProductClient;
+        this.productAvailabilityClient = productAvailabilityClient;
     }
 
     @Transactional
@@ -43,7 +43,7 @@ public class CartService {
     public CartResult addItem(AddCartItemCommand command) {
         Objects.requireNonNull(command, "command must not be null");
 
-        CartProductSnapshot product = getActiveProductOrThrow(command.productId());
+        ProductAvailabilitySnapshot product = getAvailableProductOrThrow(command.productId());
 
         Cart cart = cartRepository.findByUserId(command.userId())
                 .orElseGet(() -> Cart.create(command.userId()));
@@ -70,7 +70,7 @@ public class CartService {
 
         CartItem existingItem = getExistingItemOrThrow(cart, command.itemId());
 
-        CartProductSnapshot product = getActiveProductOrThrow(existingItem.getProductId());
+        ProductAvailabilitySnapshot product = getAvailableProductOrThrow(existingItem.getProductId());
 
         ensureStockIsEnough(command.quantity(), product.stockQuantity());
 
@@ -123,8 +123,8 @@ public class CartService {
                 .orElseThrow(() -> new BusinessException(CartErrorCode.CART_ITEM_NOT_FOUND));
     }
 
-    private CartProductSnapshot getActiveProductOrThrow(UUID productId) {
-        return catalogProductClient.findActiveProduct(productId)
+    private ProductAvailabilitySnapshot getAvailableProductOrThrow(UUID productId) {
+        return productAvailabilityClient.findAvailableProduct(productId)
                 .orElseThrow(() -> new BusinessException(CartErrorCode.PRODUCT_NOT_AVAILABLE));
     }
 

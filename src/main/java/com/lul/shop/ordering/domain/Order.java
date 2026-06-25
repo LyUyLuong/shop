@@ -89,8 +89,12 @@ public class Order {
         return this.userId.equals(userId);
     }
 
-    public void changeStatus(OrderStatus status) {
-        this.status = Objects.requireNonNull(status, "status must not be null");
+    public void markPaid() {
+        if (status != OrderStatus.PENDING_PAYMENT) {
+            throw new IllegalStateException("only pending payment order can be marked as paid");
+        }
+
+        this.status = OrderStatus.PAID;
     }
 
     private static List<OrderItem> requireNonEmptyItems(List<OrderItem> items) {

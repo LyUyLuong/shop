@@ -4,14 +4,14 @@ import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.UUID;
 
-public record ProductSnapshot(
+public record CheckoutProductSnapshot(
         UUID id,
         String sku,
         String name,
         BigDecimal price
 ) {
 
-    public ProductSnapshot {
+    public CheckoutProductSnapshot {
         Objects.requireNonNull(id, "id must not be null");
         Objects.requireNonNull(price, "price must not be null");
 

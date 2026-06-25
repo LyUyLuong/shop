@@ -3,12 +3,12 @@ package com.lul.shop.ordering.application.port;
 import java.util.Objects;
 import java.util.UUID;
 
-public record CartItemSnapshot(
+public record CheckoutCartItemSnapshot(
         UUID productId,
         int quantity
 ) {
 
-    public CartItemSnapshot {
+    public CheckoutCartItemSnapshot {
         Objects.requireNonNull(productId, "productId must not be null");
 
         if (quantity <= 0) {

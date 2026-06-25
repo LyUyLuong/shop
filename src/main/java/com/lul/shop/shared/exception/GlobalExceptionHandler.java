@@ -132,4 +132,13 @@ public class GlobalExceptionHandler {
 
 
     }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalState(IllegalStateException ex) {
+        CommonErrorCode code = CommonErrorCode.INVALID_REQUEST;
+
+        return ResponseEntity
+                .status(code.getHttpStatus())
+                .body(ApiResponse.error(ErrorInfo.of(code.getCode(), ex.getMessage())));
+    }
 }

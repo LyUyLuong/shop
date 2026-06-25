@@ -2,9 +2,9 @@ package com.lul.shop.ordering.application.port;
 
 import java.util.UUID;
 
-public interface ProductCheckoutClient {
+public interface CheckoutProductClient {
 
-    ProductSnapshot getActiveProduct(UUID productId);
+    CheckoutProductSnapshot getProductForCheckout(UUID productId);
 
     boolean decreaseStockIfEnough(UUID productId, int quantity);
 }

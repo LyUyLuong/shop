@@ -3,13 +3,13 @@ package com.lul.shop.ordering.application.port;
 import java.util.List;
 import java.util.UUID;
 
-public record CartSnapshot(
+public record CheckoutCartSnapshot(
         UUID id,
         UUID userId,
-        List<CartItemSnapshot> items
+        List<CheckoutCartItemSnapshot> items
 ) {
 
-    public CartSnapshot {
+    public CheckoutCartSnapshot {
         items = List.copyOf(items == null ? List.of() : items);
     }
 

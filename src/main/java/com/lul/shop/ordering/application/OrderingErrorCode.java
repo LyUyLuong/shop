@@ -7,7 +7,8 @@ public enum OrderingErrorCode implements ErrorCode {
     CART_EMPTY("ORDERING_001", "Cart is empty", 409),
     PRODUCT_NOT_AVAILABLE("ORDERING_002", "Product is not available for ordering", 409),
     INSUFFICIENT_STOCK("ORDERING_003", "Product stock is not enough", 409),
-    ORDER_NOT_FOUND("ORDERING_004", "Order was not found", 404);
+    ORDER_NOT_FOUND("ORDERING_004", "Order was not found", 404),
+    ORDER_NOT_PAYABLE("ORDERING_005", "Order is not payable", 409);
 
     private final String code;
     private final String message;

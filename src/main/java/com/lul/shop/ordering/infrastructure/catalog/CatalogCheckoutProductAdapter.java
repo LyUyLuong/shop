@@ -4,28 +4,28 @@ import com.lul.shop.catalog.application.CatalogErrorCode;
 import com.lul.shop.catalog.application.CatalogService;
 import com.lul.shop.catalog.application.dto.ProductResult;
 import com.lul.shop.ordering.application.OrderingErrorCode;
-import com.lul.shop.ordering.application.port.ProductCheckoutClient;
-import com.lul.shop.ordering.application.port.ProductSnapshot;
+import com.lul.shop.ordering.application.port.CheckoutProductClient;
+import com.lul.shop.ordering.application.port.CheckoutProductSnapshot;
 import com.lul.shop.shared.exception.BusinessException;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
 @Component
-public class CatalogProductCheckoutClientAdapter implements ProductCheckoutClient {
+public class CatalogCheckoutProductAdapter implements CheckoutProductClient {
 
     private final CatalogService catalogService;
 
-    public CatalogProductCheckoutClientAdapter(CatalogService catalogService) {
+    public CatalogCheckoutProductAdapter(CatalogService catalogService) {
         this.catalogService = catalogService;
     }
 
     @Override
-    public ProductSnapshot getActiveProduct(UUID productId) {
+    public CheckoutProductSnapshot getProductForCheckout(UUID productId) {
         try {
             ProductResult result = catalogService.getActiveProduct(productId);
 
-            return new ProductSnapshot(
+            return new CheckoutProductSnapshot(
                     result.id(),
                     result.sku(),
                     result.name(),
