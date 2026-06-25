@@ -1,5 +1,6 @@
 package com.lul.shop.payment.application;
 
+import com.lul.shop.outbox.application.OutboxService;
 import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.application.dto.PaymentResult;
 import com.lul.shop.payment.application.port.PayableOrderSnapshot;
@@ -21,13 +22,16 @@ public class PaymentService {
 
     private final PaymentRepository paymentRepository;
     private final PayableOrderClient payableOrderClient;
+    private final OutboxService outboxService;
     private final Clock clock;
 
     public PaymentService(PaymentRepository paymentRepository,
                           PayableOrderClient payableOrderClient,
+                          OutboxService outboxService,
                           Clock clock) {
         this.paymentRepository = paymentRepository;
         this.payableOrderClient = payableOrderClient;
+        this.outboxService = outboxService;
         this.clock = clock;
     }
 
@@ -35,13 +39,12 @@ public class PaymentService {
     public PaymentResult payMock(PayOrderCommand command) {
         Objects.requireNonNull(command, "command must not be null");
 
-
         PayableOrderSnapshot order = payableOrderClient.getPayableOrder(
                 command.userId(),
                 command.orderId()
         );
 
-        if (paymentRepository.existsByOrderId(command.orderId())) {
+        if (paymentRepository.existsByOrderId(order.orderId())) {
             throw new BusinessException(PaymentErrorCode.PAYMENT_ALREADY_EXISTS);
         }
 
@@ -58,7 +61,13 @@ public class PaymentService {
 
         Payment savedPayment = paymentRepository.save(payment);
 
-        payableOrderClient.markOrderAsPaid(command.userId(), command.orderId());
+        payableOrderClient.markOrderAsPaid(command.userId(), order.orderId());
+
+        outboxService.recordOrderPaid(
+                order.orderId(),
+                savedPayment.getId(),
+                order.userId()
+        );
 
         return toResult(savedPayment);
     }

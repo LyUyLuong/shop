@@ -31,6 +31,7 @@ spring:
         default-page-size: 20
         max-page-size: 100
         one-indexed-parameters: false
+
   servlet:
     multipart:
       max-file-size: 5MB
@@ -63,6 +64,19 @@ app:
     presigned-url-expiry: PT15M
     product-image-prefix: ${S3_PRODUCT_IMAGE_PREFIX:products}
     public-base-url: ${S3_PUBLIC_BASE_URL:}
+
+  sqs:
+    region: ${AWS_REGION:ap-southeast-1}
+    access-key: ${AWS_ACCESS_KEY:}
+    secret-key: ${AWS_SECRET_KEY:}
+
+  outbox:
+    publisher:
+      enabled: ${OUTBOX_PUBLISHER_ENABLED:false}
+      queue-url: ${ORDER_EVENTS_QUEUE_URL:}
+      max-batch-size: ${OUTBOX_MAX_BATCH_SIZE:10}
+      max-retry-count: ${OUTBOX_MAX_RETRY_COUNT:5}
+      fixed-delay-ms: ${OUTBOX_FIXED_DELAY_MS:10000}
 
 springdoc:
   api-docs:
