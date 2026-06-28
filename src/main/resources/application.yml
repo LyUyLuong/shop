@@ -77,7 +77,14 @@ app:
       max-batch-size: ${OUTBOX_MAX_BATCH_SIZE:10}
       max-retry-count: ${OUTBOX_MAX_RETRY_COUNT:5}
       fixed-delay-ms: ${OUTBOX_FIXED_DELAY_MS:10000}
-
+  notification:
+    consumer:
+      enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
+      queue-url: ${ORDER_EVENTS_QUEUE_URL:}
+      max-messages: ${NOTIFICATION_CONSUMER_MAX_MESSAGES:10}
+      wait-time-seconds: ${NOTIFICATION_CONSUMER_WAIT_TIME_SECONDS:10}
+      visibility-timeout-seconds: ${NOTIFICATION_CONSUMER_VISIBILITY_TIMEOUT_SECONDS:30}
+      fixed-delay-ms: ${NOTIFICATION_CONSUMER_FIXED_DELAY_MS:10000}
 springdoc:
   api-docs:
     path: /v3/api-docs
