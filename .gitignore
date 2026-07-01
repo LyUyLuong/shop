@@ -1,5 +1,7 @@
 *.md
 *.txt
+!GUIDE.md
+!REFERENCE.md
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -32,3 +34,8 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local secrets
+.env
+.env.*
+!.env.example

@@ -57,7 +57,7 @@ app:
     issuer: shop
 
   s3:
-    bucket: ${S3_BUCKET:shop-product-images}
+    bucket: ${S3_BUCKET:your-shop-product-images-bucket}
     region: ${AWS_REGION:ap-southeast-1}
     access-key: ${AWS_ACCESS_KEY:}
     secret-key: ${AWS_SECRET_KEY:}

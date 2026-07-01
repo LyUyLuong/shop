@@ -3,18 +3,55 @@ services:
     image: postgres:16-alpine
     container_name: shop-postgres
     ports:
-      - "5433:5432"
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
     environment:
-      POSTGRES_DB: shop_db
-      POSTGRES_USER: shop_user
-      POSTGRES_PASSWORD: shop_password
+      POSTGRES_DB: ${POSTGRES_DB:-shop_db}
+      POSTGRES_USER: ${POSTGRES_USER:-shop_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shop_password}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U shop_user -d shop_db"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shop-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${APP_HOST_PORT:-8081}:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SERVER_PORT: ${SERVER_PORT:-8081}
+      DB_URL: ${DB_URL:-jdbc:postgresql://postgres:5432/shop_db}
+      DB_USERNAME: ${DB_USERNAME:-shop_user}
+      DB_PASSWORD: ${DB_PASSWORD:-shop_password}
+      APP_PUBLIC_API_URL: ${APP_PUBLIC_API_URL:-http://localhost:8081}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:-change-this-to-at-least-32-bytes-long-for-local-docker}
+      AWS_REGION: ${AWS_REGION:-ap-southeast-1}
+      AWS_ACCESS_KEY: ${AWS_ACCESS_KEY:-}
+      AWS_SECRET_KEY: ${AWS_SECRET_KEY:-}
+      S3_BUCKET: ${S3_BUCKET:-your-shop-product-images-bucket}
+      S3_PRODUCT_IMAGE_PREFIX: ${S3_PRODUCT_IMAGE_PREFIX:-products}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+      ORDER_EVENTS_QUEUE_URL: ${ORDER_EVENTS_QUEUE_URL:-}
+      OUTBOX_PUBLISHER_ENABLED: ${OUTBOX_PUBLISHER_ENABLED:-false}
+      OUTBOX_MAX_BATCH_SIZE: ${OUTBOX_MAX_BATCH_SIZE:-10}
+      OUTBOX_MAX_RETRY_COUNT: ${OUTBOX_MAX_RETRY_COUNT:-5}
+      OUTBOX_FIXED_DELAY_MS: ${OUTBOX_FIXED_DELAY_MS:-10000}
+      NOTIFICATION_CONSUMER_ENABLED: ${NOTIFICATION_CONSUMER_ENABLED:-false}
+      NOTIFICATION_CONSUMER_MAX_MESSAGES: ${NOTIFICATION_CONSUMER_MAX_MESSAGES:-10}
+      NOTIFICATION_CONSUMER_WAIT_TIME_SECONDS: ${NOTIFICATION_CONSUMER_WAIT_TIME_SECONDS:-10}
+      NOTIFICATION_CONSUMER_VISIBILITY_TIMEOUT_SECONDS: ${NOTIFICATION_CONSUMER_VISIBILITY_TIMEOUT_SECONDS:-30}
+      NOTIFICATION_CONSUMER_FIXED_DELAY_MS: ${NOTIFICATION_CONSUMER_FIXED_DELAY_MS:-10000}
+    restart: unless-stopped
 
 volumes:
   postgres-data:
