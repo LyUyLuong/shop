@@ -95,6 +95,10 @@ springdoc:
     display-request-duration: true
   show-actuator: false
 
+logging:
+  pattern:
+    level: "%5p [requestId:%X{requestId:-}]"
+
 management:
   endpoints:
     web:
