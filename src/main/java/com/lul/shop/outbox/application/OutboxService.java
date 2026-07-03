@@ -7,6 +7,8 @@ import com.lul.shop.outbox.domain.OutboxEventRepository;
 import com.lul.shop.outbox.domain.OutboxEventType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.UUID;
@@ -19,6 +21,8 @@ public class OutboxService {
 
     private final OutboxEventRepository outboxEventRepository;
     private final ObjectMapper objectMapper;
+
+    private static final Logger log = LoggerFactory.getLogger(OutboxService.class);
 
     public OutboxService(OutboxEventRepository outboxEventRepository,
                          ObjectMapper objectMapper) {
@@ -44,7 +48,18 @@ public class OutboxService {
                 ))
         );
 
-        outboxEventRepository.save(event);
+        OutboxEvent savedEvent = outboxEventRepository.save(event);
+
+        log.info(
+                "action=outbox.recorded eventId={} eventType={} aggregateType={} aggregateId={} orderId={} paymentId={} userId={}",
+                savedEvent.getId(),
+                savedEvent.getEventType(),
+                savedEvent.getAggregateType(),
+                savedEvent.getAggregateId(),
+                orderId,
+                paymentId,
+                userId
+        );
     }
 
     private String toJson(Object payload) {

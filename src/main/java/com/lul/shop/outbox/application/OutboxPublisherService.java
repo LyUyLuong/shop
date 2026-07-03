@@ -5,6 +5,8 @@ import com.lul.shop.outbox.domain.OutboxEvent;
 import com.lul.shop.outbox.domain.OutboxEventRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -20,6 +22,8 @@ public class OutboxPublisherService {
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxMessagePublisher outboxMessagePublisher;
     private final Clock clock;
+
+    private static final Logger log = LoggerFactory.getLogger(OutboxPublisherService.class);
 
     public OutboxPublisherService(OutboxEventRepository outboxEventRepository,
                                   OutboxMessagePublisher outboxMessagePublisher,
@@ -54,10 +58,33 @@ public class OutboxPublisherService {
             outboxMessagePublisher.publish(event);
             event.markPublished(Instant.now(clock));
             outboxEventRepository.save(event);
+
+            log.info(
+                    "action=outbox.published eventId={} eventType={} aggregateType={} aggregateId={} retryCount={}",
+                    event.getId(),
+                    event.getEventType(),
+                    event.getAggregateType(),
+                    event.getAggregateId(),
+                    event.getRetryCount()
+            );
+
             return true;
         } catch (RuntimeException ex) {
             event.markPublishFailed(toLastError(ex), maxRetryCount);
             outboxEventRepository.save(event);
+
+            log.warn(
+                    "action=outbox.publish_failed eventId={} eventType={} aggregateType={} aggregateId={} retryCount={} maxRetryCount={} statusAfterFailure={} lastError={}",
+                    event.getId(),
+                    event.getEventType(),
+                    event.getAggregateType(),
+                    event.getAggregateId(),
+                    event.getRetryCount(),
+                    maxRetryCount,
+                    event.getStatus(),
+                    event.getLastError()
+            );
+
             return false;
         }
     }

@@ -10,6 +10,8 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -21,6 +23,8 @@ public class S3ProductImageStorage implements ProductImageStorage {
 
     private final S3Client s3Client;
     private final S3Properties properties;
+
+    private static final Logger log = LoggerFactory.getLogger(S3ProductImageStorage.class);
 
     public S3ProductImageStorage(S3Client s3Client, S3Properties properties) {
         this.s3Client = s3Client;
@@ -42,6 +46,14 @@ public class S3ProductImageStorage implements ProductImageStorage {
             s3Client.putObject(
                     request,
                     RequestBody.fromInputStream(command.content(), command.size())
+            );
+
+            log.info(
+                    "action=product.image_uploaded productId={} imageKey={} contentType={} size={}",
+                    productId,
+                    imageKey,
+                    command.contentType(),
+                    command.size()
             );
 
             return new StoredProductImage(imageKey, buildImageUrl(imageKey));

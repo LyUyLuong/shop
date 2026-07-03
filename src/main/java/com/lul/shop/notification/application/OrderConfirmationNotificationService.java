@@ -33,7 +33,14 @@ public class OrderConfirmationNotificationService {
         Objects.requireNonNull(message, "message must not be null");
 
         if (notificationEventLogRepository.existsByEventId(message.eventId())) {
-            log.info("Skipping duplicate notification event: eventId={}", message.eventId());
+
+            log.info(
+                    "action=notification.duplicate_skipped eventId={} orderId={} paymentId={}",
+                    message.eventId(),
+                    message.orderId(),
+                    message.paymentId()
+            );
+
             return;
         }
 
@@ -53,5 +60,13 @@ public class OrderConfirmationNotificationService {
         );
 
         notificationEventLogRepository.save(eventLog);
+
+        log.info(
+                "action=notification.processed eventId={} orderId={} paymentId={} userId={}",
+                message.eventId(),
+                message.orderId(),
+                message.paymentId(),
+                message.userId()
+        );
     }
 }

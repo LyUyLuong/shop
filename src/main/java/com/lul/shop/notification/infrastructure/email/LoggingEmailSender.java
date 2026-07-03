@@ -14,7 +14,7 @@ public class LoggingEmailSender implements EmailSender {
     @Override
     public void sendOrderConfirmation(OrderConfirmationEmail email) {
         log.info(
-                "Order confirmation email sent: userId={}, orderId={}, paymentId={}",
+                "action=notification.mock_email_sent userId={} orderId={} paymentId={}",
                 email.userId(),
                 email.orderId(),
                 email.paymentId()

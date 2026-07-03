@@ -15,6 +15,8 @@ import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.shared.exception.BusinessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
@@ -27,6 +29,8 @@ public class OrderingService {
     private final OrderRepository orderRepository;
     private final CheckoutCartClient checkoutCartClient;
     private final CheckoutProductClient checkoutProductClient;
+
+    private static final Logger log = LoggerFactory.getLogger(OrderingService.class);
 
     public OrderingService(OrderRepository orderRepository,
                            CheckoutCartClient checkoutCartClient,
@@ -56,6 +60,14 @@ public class OrderingService {
         Order savedOrder = orderRepository.save(order);
 
         checkoutCartClient.clearCart(command.userId());
+
+        log.info(
+                "action=order.placed userId={} orderId={} itemCount={} totalAmount={}",
+                savedOrder.getUserId(),
+                savedOrder.getId(),
+                savedOrder.getItems().size(),
+                savedOrder.getTotalAmount()
+        );
 
         return toResult(savedOrder);
     }
@@ -93,7 +105,14 @@ public class OrderingService {
 
         order.markPaid();
 
-        orderRepository.save(order);
+        Order savedOrder = orderRepository.save(order);
+
+        log.info(
+                "action=order.marked_paid userId={} orderId={} status={}",
+                savedOrder.getUserId(),
+                savedOrder.getId(),
+                savedOrder.getStatus()
+        );
     }
 
     private OrderItem createOrderItem(CheckoutCartItemSnapshot cartItem) {

@@ -65,10 +65,37 @@ public class SqsOrderPaidNotificationConsumer {
     private void processMessage(Message message) {
         try {
             OrderPaidNotificationMessage notificationMessage = toNotificationMessage(message);
+
+            log.info(
+                    "action=sqs.message_received messageId={} eventId={} eventType={} aggregateId={}",
+                    message.messageId(),
+                    notificationMessage.eventId(),
+                    notificationMessage.eventType(),
+                    notificationMessage.aggregateId()
+            );
+
+
             notificationService.handleOrderPaid(notificationMessage);
             deleteMessage(message);
+
+            log.info(
+                    "action=sqs.message_processed_deleted messageId={} eventId={} orderId={} paymentId={}",
+                    message.messageId(),
+                    notificationMessage.eventId(),
+                    notificationMessage.orderId(),
+                    notificationMessage.paymentId()
+            );
+
         } catch (RuntimeException ex) {
-            log.warn("Failed to process SQS notification message: messageId={}", message.messageId(), ex);
+            log.warn(
+                    "action=sqs.message_failed_before_delete messageId={} eventId={} eventType={} reason={}",
+                    message.messageId(),
+                    optionalAttribute(message, "eventId"),
+                    optionalAttribute(message, "eventType"),
+                    failureReason(ex),
+                    ex
+            );
+
         }
     }
 
@@ -79,6 +106,11 @@ public class SqsOrderPaidNotificationConsumer {
         UUID aggregateId = UUID.fromString(requiredAttribute(message, "aggregateId"));
 
         if (!ORDER_PAID.equals(eventType)) {
+            log.warn(
+                    "action=sqs.unsupported_event_type messageId={} eventType={}",
+                    message.messageId(),
+                    eventType
+            );
             throw new IllegalArgumentException("Unsupported notification event type: " + eventType);
         }
 
@@ -148,5 +180,25 @@ public class SqsOrderPaidNotificationConsumer {
                 .build();
 
         sqsClient.deleteMessage(request);
+    }
+
+    private String optionalAttribute(Message message, String name) {
+        MessageAttributeValue value = message.messageAttributes().get(name);
+
+        if (value == null || value.stringValue() == null || value.stringValue().isBlank()) {
+            return null;
+        }
+
+        return value.stringValue();
+    }
+
+    private String failureReason(RuntimeException ex) {
+        String message = ex.getMessage();
+
+        if (message == null || message.isBlank()) {
+            return ex.getClass().getSimpleName();
+        }
+
+        return message.trim();
     }
 }

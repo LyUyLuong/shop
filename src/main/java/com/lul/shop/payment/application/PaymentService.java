@@ -10,6 +10,8 @@ import com.lul.shop.payment.domain.PaymentRepository;
 import com.lul.shop.shared.exception.BusinessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -24,6 +26,8 @@ public class PaymentService {
     private final PayableOrderClient payableOrderClient;
     private final OutboxService outboxService;
     private final Clock clock;
+
+    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
 
     public PaymentService(PaymentRepository paymentRepository,
                           PayableOrderClient payableOrderClient,
@@ -67,6 +71,23 @@ public class PaymentService {
                 order.orderId(),
                 savedPayment.getId(),
                 order.userId()
+        );
+
+        log.info(
+                "action=payment.succeeded userId={} orderId={} paymentId={} amount={} method={} status={}",
+                savedPayment.getUserId(),
+                savedPayment.getOrderId(),
+                savedPayment.getId(),
+                savedPayment.getAmount(),
+                savedPayment.getMethod(),
+                savedPayment.getStatus()
+        );
+
+        log.info(
+                "action=payment.order_paid_event_requested userId={} orderId={} paymentId={}",
+                order.userId(),
+                order.orderId(),
+                savedPayment.getId()
         );
 
         return toResult(savedPayment);
