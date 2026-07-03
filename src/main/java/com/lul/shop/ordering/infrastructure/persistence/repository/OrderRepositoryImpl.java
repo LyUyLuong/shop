@@ -2,8 +2,12 @@ package com.lul.shop.ordering.infrastructure.persistence.repository;
 
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderRepository;
+import com.lul.shop.ordering.domain.OrderSearchCriteria;
+import com.lul.shop.ordering.domain.OrderSummary;
 import com.lul.shop.ordering.infrastructure.persistence.entity.OrderJpaEntity;
 import com.lul.shop.ordering.infrastructure.persistence.mapper.OrderMapper;
+import com.lul.shop.shared.domain.PageQuery;
+import com.lul.shop.shared.domain.PageResult;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,11 +20,14 @@ import java.util.UUID;
 public class OrderRepositoryImpl implements OrderRepository {
 
     private final OrderJpaRepository orderJpaRepository;
+    private final OrderQueryRepository orderQueryRepository;
     private final OrderMapper orderMapper;
 
     public OrderRepositoryImpl(OrderJpaRepository orderJpaRepository,
+                               OrderQueryRepository orderQueryRepository,
                                OrderMapper orderMapper) {
         this.orderJpaRepository = orderJpaRepository;
+        this.orderQueryRepository = orderQueryRepository;
         this.orderMapper = orderMapper;
     }
 
@@ -51,5 +58,10 @@ public class OrderRepositoryImpl implements OrderRepository {
                 .stream()
                 .map(orderMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public PageResult<OrderSummary> searchSummaries(OrderSearchCriteria criteria, PageQuery pageQuery) {
+        return orderQueryRepository.searchSummaries(criteria, pageQuery);
     }
 }

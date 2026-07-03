@@ -90,11 +90,36 @@ public class Order {
     }
 
     public void markPaid() {
-        if (status != OrderStatus.PENDING_PAYMENT) {
-            throw new IllegalStateException("only pending payment order can be marked as paid");
+        changeStatus(OrderStatus.PAID);
+    }
+
+    public OrderStatus changeStatus(OrderStatus targetStatus) {
+        Objects.requireNonNull(targetStatus, "targetStatus must not be null");
+
+        OrderStatus previousStatus = this.status;
+
+        if (!canMoveTo(targetStatus)) {
+            throw new IllegalStateException(
+                    "order status cannot move from " + previousStatus + " to " + targetStatus
+            );
         }
 
-        this.status = OrderStatus.PAID;
+        this.status = targetStatus;
+
+        return previousStatus;
+    }
+
+    public boolean canMoveTo(OrderStatus targetStatus) {
+        Objects.requireNonNull(targetStatus, "targetStatus must not be null");
+
+        return switch (status) {
+            case PENDING_PAYMENT -> targetStatus == OrderStatus.PAID
+                    || targetStatus == OrderStatus.CANCELLED;
+            case PAID -> targetStatus == OrderStatus.PACKING;
+            case PACKING -> targetStatus == OrderStatus.SHIPPED;
+            case SHIPPED -> targetStatus == OrderStatus.COMPLETED;
+            case COMPLETED, CANCELLED -> false;
+        };
     }
 
     private static List<OrderItem> requireNonEmptyItems(List<OrderItem> items) {
