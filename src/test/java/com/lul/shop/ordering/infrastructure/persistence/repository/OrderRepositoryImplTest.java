@@ -5,6 +5,10 @@ import com.lul.shop.ordering.domain.OrderItem;
 import com.lul.shop.ordering.domain.OrderRepository;
 import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.shared.test.PostgresIntegrationTest;
+import com.lul.shop.ordering.domain.OrderSearchCriteria;
+import com.lul.shop.ordering.domain.OrderSummary;
+import com.lul.shop.shared.domain.PageQuery;
+import com.lul.shop.shared.domain.PageResult;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -153,6 +157,49 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
         assertThat(reloaded.getItems()).hasSize(1);
     }
 
+    @Test
+    void shouldSearchOrderSummariesByStatusAndCreatedAtDescending() {
+        insertUser(USER_ID, "summary-user@example.com");
+        insertProduct(PRODUCT_ID, "SUMMARY-SKU-001", "Summary Product", "100000.00", 10);
+
+        Order olderPaidOrder = orderRepository.save(paidSingleItemOrder(USER_ID, PRODUCT_ID, "OLDER-PAID"));
+        Order newerPaidOrder = orderRepository.save(paidSingleItemOrder(USER_ID, PRODUCT_ID, "NEWER-PAID"));
+        Order pendingOrder = orderRepository.save(singleItemOrder(USER_ID, PRODUCT_ID, "PENDING-ORDER"));
+
+        flushAndClear();
+
+        updateOrderCreatedAt(olderPaidOrder.getId(), Instant.parse("2026-07-01T00:00:00Z"));
+        updateOrderCreatedAt(newerPaidOrder.getId(), Instant.parse("2026-07-02T00:00:00Z"));
+        updateOrderCreatedAt(pendingOrder.getId(), Instant.parse("2026-07-03T00:00:00Z"));
+
+        flushAndClear();
+
+        PageResult<OrderSummary> result = orderRepository.searchSummaries(
+                new OrderSearchCriteria(
+                        OrderStatus.PAID,
+                        Instant.parse("2026-07-01T00:00:00Z"),
+                        Instant.parse("2026-07-02T23:59:59Z")
+                ),
+                new PageQuery(0, 10)
+        );
+
+        assertThat(result.content())
+                .extracting(OrderSummary::id)
+                .containsExactly(newerPaidOrder.getId(), olderPaidOrder.getId());
+
+        assertThat(result.totalElements()).isEqualTo(2);
+        assertThat(result.totalPages()).isEqualTo(1);
+        assertThat(result.hasNext()).isFalse();
+
+        assertThat(result.content())
+                .extracting(OrderSummary::status)
+                .containsOnly(OrderStatus.PAID);
+
+        assertThat(result.content())
+                .extracting(OrderSummary::itemCount)
+                .containsExactly(1, 1);
+    }
+
     private Order singleItemOrder(UUID userId, UUID productId, String productSku) {
         return Order.create(
                 userId,
@@ -216,6 +263,13 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
                 orderId
         );
     }
+
+    private Order paidSingleItemOrder(UUID userId, UUID productId, String productSku) {
+        Order order = singleItemOrder(userId, productId, productSku);
+        order.markPaid();
+        return order;
+    }
+
 
     private void flushAndClear() {
         entityManager.flush();

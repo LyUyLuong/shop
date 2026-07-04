@@ -8,6 +8,10 @@ import com.lul.shop.ordering.domain.OrderItem;
 import com.lul.shop.ordering.domain.OrderRepository;
 import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.shared.exception.BusinessException;
+import com.lul.shop.ordering.domain.OrderSearchCriteria;
+import com.lul.shop.ordering.domain.OrderSummary;
+import com.lul.shop.shared.domain.PageQuery;
+import com.lul.shop.shared.domain.PageResult;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -182,6 +186,12 @@ public class OrderingServiceTest {
                     .filter(order -> order.belongsTo(userId))
                     .toList();
         }
+
+        @Override
+        public PageResult<OrderSummary> searchSummaries(OrderSearchCriteria criteria, PageQuery pageQuery) {
+            throw new UnsupportedOperationException("searchSummaries is not used in OrderingServiceTest");
+        }
+
     }
 
     private static class FakeCheckoutCartClient implements CheckoutCartClient {
