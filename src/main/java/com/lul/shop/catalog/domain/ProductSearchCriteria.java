@@ -47,4 +47,8 @@ public record ProductSearchCriteria(
         }
     }
 
+    public static ProductSearchCriteria withStatus(String keyword, ProductStatus status) {
+        return new ProductSearchCriteria(keyword, status, null, null);
+    }
+
 }

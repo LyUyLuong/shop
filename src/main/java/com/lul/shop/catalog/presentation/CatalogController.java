@@ -14,6 +14,8 @@ import com.lul.shop.shared.api.PageResponse;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.BusinessException;
+import com.lul.shop.catalog.domain.ProductSearchCriteria;
+import com.lul.shop.catalog.domain.ProductStatus;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -109,6 +111,32 @@ public class CatalogController {
 
         return ApiResponse.ok(ProductResponse.from(result));
     }
+
+    @GetMapping("/admin/products")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<PageResponse<ProductResponse>> searchAdminProducts(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) ProductStatus status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        ProductSearchCriteria criteria = ProductSearchCriteria.withStatus(keyword, status);
+
+        PageResult<ProductResponse> result = catalogService
+                .searchProducts(criteria, toPageQuery(page, size))
+                .map(ProductResponse::from);
+
+        return ApiResponse.ok(PageResponse.from(result));
+    }
+
+    @GetMapping("/admin/products/{productId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<ProductResponse> getAdminProduct(@PathVariable UUID productId) {
+        ProductResult result = catalogService.getProduct(productId);
+
+        return ApiResponse.ok(ProductResponse.from(result));
+    }
+
 
     private UploadProductImageCommand toUploadProductImageCommand(MultipartFile file) {
         try {
