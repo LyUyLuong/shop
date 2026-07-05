@@ -16,6 +16,12 @@ import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.BusinessException;
 import com.lul.shop.catalog.domain.ProductSearchCriteria;
 import com.lul.shop.catalog.domain.ProductStatus;
+import com.lul.shop.catalog.application.dto.ProductImageContent;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
+
+import java.util.concurrent.TimeUnit;
 import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -135,6 +141,18 @@ public class CatalogController {
         ProductResult result = catalogService.getProduct(productId);
 
         return ApiResponse.ok(ProductResponse.from(result));
+    }
+
+
+    @GetMapping("/products/{productId}/image")
+    public ResponseEntity<InputStreamResource> getProductImage(@PathVariable UUID productId) {
+        ProductImageContent image = catalogService.getProductImage(productId);
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(image.contentType()))
+                .contentLength(image.contentLength())
+                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
+                .body(new InputStreamResource(image.content()));
     }
 
 

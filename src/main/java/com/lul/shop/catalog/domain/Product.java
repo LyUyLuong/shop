@@ -126,7 +126,7 @@ public class Product {
 
     public void updateImage(String imageKey, String imageUrl) {
         this.imageKey = requireImageKey(imageKey);
-        this.imageUrl = requireImageUrl(imageUrl);
+        this.imageUrl = normalizeOptionalText(imageUrl);
     }
 
     public void clearImage() {

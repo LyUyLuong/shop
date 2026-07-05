@@ -1,15 +1,17 @@
 package com.lul.shop.catalog.infrastructure.storage.s3;
 
 import com.lul.shop.catalog.application.CatalogErrorCode;
+import com.lul.shop.catalog.application.dto.ProductImageContent;
 import com.lul.shop.catalog.application.dto.StoredProductImage;
 import com.lul.shop.catalog.application.dto.UploadProductImageCommand;
 import com.lul.shop.catalog.application.port.ProductImageStorage;
 import com.lul.shop.shared.exception.BusinessException;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,9 +58,37 @@ public class S3ProductImageStorage implements ProductImageStorage {
                     command.size()
             );
 
-            return new StoredProductImage(imageKey, buildImageUrl(imageKey));
+            return new StoredProductImage(imageKey);
         } catch (SdkException ex) {
             throw new BusinessException(CatalogErrorCode.PRODUCT_IMAGE_UPLOAD_FAILED);
+        }
+    }
+
+    @Override
+    public ProductImageContent load(String imageKey) {
+        try {
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(properties.bucket())
+                    .key(imageKey)
+                    .build();
+
+            ResponseInputStream<GetObjectResponse> response = s3Client.getObject(request);
+
+            return new ProductImageContent(
+                    response,
+                    response.response().contentType(),
+                    response.response().contentLength()
+            );
+        } catch (NoSuchKeyException ex) {
+            throw new BusinessException(CatalogErrorCode.PRODUCT_IMAGE_NOT_FOUND);
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == 404) {
+                throw new BusinessException(CatalogErrorCode.PRODUCT_IMAGE_NOT_FOUND);
+            }
+
+            throw new BusinessException(CatalogErrorCode.PRODUCT_IMAGE_READ_FAILED);
+        } catch (SdkException ex) {
+            throw new BusinessException(CatalogErrorCode.PRODUCT_IMAGE_READ_FAILED);
         }
     }
 

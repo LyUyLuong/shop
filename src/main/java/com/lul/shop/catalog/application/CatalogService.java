@@ -38,11 +38,14 @@ public class CatalogService {
 
     private final ProductRepository productRepository;
     private final ProductImageStorage productImageStorage;
+    private final ProductImageUrlResolver productImageUrlResolver;
 
     public CatalogService(ProductRepository productRepository,
-                          ProductImageStorage productImageStorage) {
+                          ProductImageStorage productImageStorage,
+                          ProductImageUrlResolver productImageUrlResolver) {
         this.productRepository = productRepository;
         this.productImageStorage = productImageStorage;
+        this.productImageUrlResolver = productImageUrlResolver;
     }
 
 
@@ -127,7 +130,7 @@ public class CatalogService {
                 product.getPrice(),
                 product.getStockQuantity(),
                 product.getStatus(),
-                product.getImageUrl(),
+                productImageUrlResolver.resolve(product.getId(),product.getImageKey()),
                 product.getCreatedAt(),
                 product.getUpdatedAt()
         );
@@ -152,7 +155,7 @@ public class CatalogService {
 
         StoredProductImage storedImage = productImageStorage.store(productId, command);
 
-        product.updateImage(storedImage.imageKey(), storedImage.imageUrl());
+        product.updateImage(storedImage.imageKey(), null);
 
         Product savedProduct = productRepository.save(product);
 
@@ -163,6 +166,16 @@ public class CatalogService {
     @Transactional
     public boolean decreaseStockIfEnough(UUID productId, int quantity) {
         return productRepository.decreaseStockIfEnough(productId, quantity);
+    }
+
+    public ProductImageContent getProductImage(UUID productId) {
+        Product product = getProductOrThrow(productId);
+
+        if (product.getImageKey() == null || product.getImageKey().isBlank()) {
+            throw new BusinessException(CatalogErrorCode.PRODUCT_IMAGE_NOT_FOUND);
+        }
+
+        return productImageStorage.load(product.getImageKey());
     }
 
 

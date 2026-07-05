@@ -8,7 +8,9 @@ public enum CatalogErrorCode implements ErrorCode {
     PRODUCT_SKU_ALREADY_EXISTS("CATALOG_002", "Product SKU already exists", 409),
     PRODUCT_NOT_ACTIVE("CATALOG_003", "Product is not active", 409),
     INVALID_PRODUCT_IMAGE("CATALOG_004", "Invalid product image", 400),
-    PRODUCT_IMAGE_UPLOAD_FAILED("CATALOG_005", "Product image upload failed", 502);
+    PRODUCT_IMAGE_UPLOAD_FAILED("CATALOG_005", "Product image upload failed", 502),
+    PRODUCT_IMAGE_NOT_FOUND("CATALOG_006", "Product image was not found", 404),
+    PRODUCT_IMAGE_READ_FAILED("CATALOG_007", "Product image could not be loaded", 502);
 
     private final String code;
     private final String message;

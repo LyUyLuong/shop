@@ -1,13 +1,11 @@
 package com.lul.shop.catalog.application.dto;
 
 public record StoredProductImage(
-        String imageKey,
-        String imageUrl
+        String imageKey
 ) {
 
     public StoredProductImage {
         imageKey = requireNonBlank(imageKey, "imageKey");
-        imageUrl = requireNonBlank(imageUrl, "imageUrl");
     }
 
     private static String requireNonBlank(String value, String fieldName) {
