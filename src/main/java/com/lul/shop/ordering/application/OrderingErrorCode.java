@@ -9,7 +9,10 @@ public enum OrderingErrorCode implements ErrorCode {
     INSUFFICIENT_STOCK("ORDERING_003", "Product stock is not enough", 409),
     ORDER_NOT_FOUND("ORDERING_004", "Order was not found", 404),
     ORDER_NOT_PAYABLE("ORDERING_005", "Order is not payable", 409),
-    INVALID_ORDER_STATUS_TRANSITION("ORDERING_006", "Order status transition is invalid", 409);
+    INVALID_ORDER_STATUS_TRANSITION("ORDERING_006", "Order status transition is invalid", 409),
+    ORDER_ITEM_NOT_FOUND("ORDERING_007", "Order item was not found", 404),
+    ORDER_ITEM_IMAGE_NOT_FOUND("ORDERING_008", "Order item image was not found", 404),
+    ORDER_ITEM_IMAGE_READ_FAILED("ORDERING_009", "Order item image could not be loaded", 502);
 
     private final String code;
     private final String message;

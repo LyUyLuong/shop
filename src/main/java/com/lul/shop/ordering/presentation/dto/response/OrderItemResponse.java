@@ -10,17 +10,19 @@ public record OrderItemResponse(
         UUID productId,
         String productSku,
         String productName,
+        String imageUrl,
         BigDecimal unitPrice,
         int quantity,
         BigDecimal lineTotal
 ) {
 
-    public static OrderItemResponse from(OrderItemResult result) {
+    public static OrderItemResponse from(OrderItemResult result, String imageUrl) {
         return new OrderItemResponse(
                 result.id(),
                 result.productId(),
                 result.productSku(),
                 result.productName(),
+                imageUrl,
                 result.unitPrice(),
                 result.quantity(),
                 result.lineTotal()

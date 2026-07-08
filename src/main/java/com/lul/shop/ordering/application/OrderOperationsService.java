@@ -146,6 +146,7 @@ public class OrderOperationsService {
                 item.getProductId(),
                 item.getProductSku(),
                 item.getProductName(),
+                item.getProductImageKey(),
                 item.getUnitPrice(),
                 item.getQuantity(),
                 item.getLineTotal()

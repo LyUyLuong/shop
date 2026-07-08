@@ -131,6 +131,7 @@ public class OrderingService {
                 product.id(),
                 product.sku(),
                 product.name(),
+                product.imageKey(),
                 product.price(),
                 cartItem.quantity()
         );
@@ -157,6 +158,7 @@ public class OrderingService {
                 item.getProductId(),
                 item.getProductSku(),
                 item.getProductName(),
+                item.getProductImageKey(),
                 item.getUnitPrice(),
                 item.getQuantity(),
                 item.getLineTotal()

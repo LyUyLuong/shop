@@ -11,6 +11,7 @@ public class OrderItem {
     private UUID productId;
     private String productSku;
     private String productName;
+    private String productImageKey;
     private BigDecimal unitPrice;
     private int quantity;
     private BigDecimal lineTotal;
@@ -21,6 +22,7 @@ public class OrderItem {
                      UUID productId,
                      String productSku,
                      String productName,
+                     String productImageKey,
                      BigDecimal unitPrice,
                      int quantity,
                      BigDecimal lineTotal,
@@ -30,6 +32,7 @@ public class OrderItem {
         this.productId = Objects.requireNonNull(productId, "productId must not be null");
         this.productSku = requireNonBlank(productSku, "productSku");
         this.productName = requireNonBlank(productName, "productName");
+        this.productImageKey = normalizeOptional(productImageKey);
 
         BigDecimal validUnitPrice = requireNonNegativeMoney(unitPrice, "unitPrice");
         int validQuantity = requirePositiveQuantity(quantity);
@@ -50,6 +53,7 @@ public class OrderItem {
     public static OrderItem create(UUID productId,
                                    String productSku,
                                    String productName,
+                                   String productImageKey,
                                    BigDecimal unitPrice,
                                    int quantity) {
         BigDecimal validUnitPrice = requireNonNegativeMoney(unitPrice, "unitPrice");
@@ -60,6 +64,7 @@ public class OrderItem {
                 productId,
                 productSku,
                 productName,
+                productImageKey,
                 validUnitPrice,
                 validQuantity,
                 calculateLineTotal(validUnitPrice, validQuantity),
@@ -82,6 +87,10 @@ public class OrderItem {
 
     public String getProductName() {
         return productName;
+    }
+
+    public String getProductImageKey() {
+        return productImageKey;
     }
 
     public BigDecimal getUnitPrice() {
@@ -114,6 +123,10 @@ public class OrderItem {
         }
 
         return value.trim();
+    }
+
+    private static String normalizeOptional(String value) {
+        return (value == null || value.isBlank()) ? null : value.trim();
     }
 
     private static int requirePositiveQuantity(int quantity) {

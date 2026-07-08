@@ -1,6 +1,7 @@
 package com.lul.shop.ordering.presentation.dto.response;
 
 import com.lul.shop.ordering.application.dto.OrderResult;
+import com.lul.shop.ordering.presentation.OrderItemImageUrlResolver;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -17,7 +18,7 @@ public record OrderResponse(
         Instant updatedAt
 ) {
 
-    public static OrderResponse from(OrderResult result) {
+    public static OrderResponse from(OrderResult result, OrderItemImageUrlResolver imageUrlResolver) {
         return new OrderResponse(
                 result.id(),
                 result.userId(),
@@ -25,7 +26,10 @@ public record OrderResponse(
                 result.totalAmount(),
                 result.items()
                         .stream()
-                        .map(OrderItemResponse::from)
+                        .map(item -> OrderItemResponse.from(
+                                item,
+                                imageUrlResolver.customerImageUrl(result.id(), item.id(), item.productImageKey())
+                        ))
                         .toList(),
                 result.createdAt(),
                 result.updatedAt()

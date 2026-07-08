@@ -2,7 +2,7 @@ package com.lul.shop.ordering.infrastructure.catalog;
 
 import com.lul.shop.catalog.application.CatalogErrorCode;
 import com.lul.shop.catalog.application.CatalogService;
-import com.lul.shop.catalog.application.dto.ProductResult;
+import com.lul.shop.catalog.application.dto.ProductForCheckoutResult;
 import com.lul.shop.ordering.application.OrderingErrorCode;
 import com.lul.shop.ordering.application.port.CheckoutProductClient;
 import com.lul.shop.ordering.application.port.CheckoutProductSnapshot;
@@ -23,13 +23,14 @@ public class CatalogCheckoutProductAdapter implements CheckoutProductClient {
     @Override
     public CheckoutProductSnapshot getProductForCheckout(UUID productId) {
         try {
-            ProductResult result = catalogService.getActiveProduct(productId);
+            ProductForCheckoutResult result = catalogService.getProductForCheckout(productId);
 
             return new CheckoutProductSnapshot(
                     result.id(),
                     result.sku(),
                     result.name(),
-                    result.price()
+                    result.price(),
+                    result.imageKey()
             );
         } catch (BusinessException ex) {
             if (ex.getErrorCode() == CatalogErrorCode.PRODUCT_NOT_FOUND

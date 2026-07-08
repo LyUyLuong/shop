@@ -172,6 +172,7 @@ class OrderOperationsServiceTest {
                         PRODUCT_ID,
                         "SKU-001",
                         "Snapshot Product",
+                        null,
                         new BigDecimal("199000.00"),
                         1
                 ))

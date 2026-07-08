@@ -35,6 +35,9 @@ public class OrderItemJpaEntity extends UpdatableJpaEntity {
     @Column(name = "product_name", nullable = false, length = 255)
     private String productName;
 
+    @Column(name = "product_image_key", length = 500)
+    private String productImageKey;
+
     @Column(name = "unit_price", nullable = false, precision = 19, scale = 2)
     private BigDecimal unitPrice;
 

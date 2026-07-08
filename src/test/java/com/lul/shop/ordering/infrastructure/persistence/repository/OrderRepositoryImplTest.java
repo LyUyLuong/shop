@@ -53,6 +53,7 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
                                 PRODUCT_ID,
                                 "SNAPSHOT-SKU-001",
                                 "Snapshot Hoodie",
+                                "products/33333333-3333-4333-8333-333333333333/hoodie.jpg",
                                 new BigDecimal("199000.00"),
                                 2
                         ),
@@ -60,6 +61,7 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
                                 SECOND_PRODUCT_ID,
                                 "SNAPSHOT-SKU-002",
                                 "Snapshot Sticker",
+                                null,
                                 new BigDecimal("50000.00"),
                                 1
                         )
@@ -88,6 +90,8 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
 
         assertThat(hoodieItem.getProductId()).isEqualTo(PRODUCT_ID);
         assertThat(hoodieItem.getProductName()).isEqualTo("Snapshot Hoodie");
+        assertThat(hoodieItem.getProductImageKey())
+                .isEqualTo("products/33333333-3333-4333-8333-333333333333/hoodie.jpg");
         assertThat(hoodieItem.getUnitPrice()).isEqualByComparingTo("199000.00");
         assertThat(hoodieItem.getQuantity()).isEqualTo(2);
         assertThat(hoodieItem.getLineTotal()).isEqualByComparingTo("398000.00");
@@ -207,6 +211,7 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
                         productId,
                         productSku,
                         "Snapshot Product",
+                        null,
                         new BigDecimal("100000.00"),
                         1
                 ))

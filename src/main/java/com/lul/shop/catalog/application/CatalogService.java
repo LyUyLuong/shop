@@ -147,6 +147,23 @@ public class CatalogService {
         return toResult(product);
     }
 
+    public ProductForCheckoutResult getProductForCheckout(UUID productId) {
+        Product product = getProductOrThrow(productId);
+
+        if (!product.isActive()) {
+            throw new BusinessException(CatalogErrorCode.PRODUCT_NOT_ACTIVE);
+        }
+
+        return new ProductForCheckoutResult(
+                product.getId(),
+                product.getSku(),
+                product.getName(),
+                product.getPrice(),
+                product.getImageKey()
+        );
+    }
+
+
     @Transactional
     public ProductResult uploadProductImage(UUID productId, UploadProductImageCommand command) {
         Product product = getProductOrThrow(productId);
@@ -176,6 +193,14 @@ public class CatalogService {
         }
 
         return productImageStorage.load(product.getImageKey());
+    }
+
+    public ProductImageContent getProductImageByKey(String imageKey) {
+        if (imageKey == null || imageKey.isBlank()) {
+            throw new BusinessException(CatalogErrorCode.PRODUCT_IMAGE_NOT_FOUND);
+        }
+
+        return productImageStorage.load(imageKey.trim());
     }
 
 

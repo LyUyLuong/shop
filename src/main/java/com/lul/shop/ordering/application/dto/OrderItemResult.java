@@ -8,6 +8,7 @@ public record OrderItemResult(
         UUID productId,
         String productSku,
         String productName,
+        String productImageKey,
         BigDecimal unitPrice,
         int quantity,
         BigDecimal lineTotal

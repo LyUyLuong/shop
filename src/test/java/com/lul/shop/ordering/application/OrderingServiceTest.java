@@ -45,7 +45,8 @@ public class OrderingServiceTest {
                 PRODUCT_ID,
                 "SHOP-E2E-001",
                 "Workshop Hoodie",
-                new BigDecimal("199000.00")
+                new BigDecimal("199000.00"),
+                "products/33333333-3333-4333-8333-333333333333/hoodie.jpg"
         ));
 
         OrderingService service = new OrderingService(orderRepository, cartClient, productClient);
@@ -60,6 +61,8 @@ public class OrderingServiceTest {
         assertThat(result.items().get(0).productId()).isEqualTo(PRODUCT_ID);
         assertThat(result.items().get(0).productSku()).isEqualTo("SHOP-E2E-001");
         assertThat(result.items().get(0).productName()).isEqualTo("Workshop Hoodie");
+        assertThat(result.items().get(0).productImageKey())
+                .isEqualTo("products/33333333-3333-4333-8333-333333333333/hoodie.jpg");
         assertThat(result.items().get(0).unitPrice()).isEqualByComparingTo("199000.00");
         assertThat(result.items().get(0).quantity()).isEqualTo(2);
         assertThat(result.items().get(0).lineTotal()).isEqualByComparingTo("398000.00");
@@ -105,10 +108,11 @@ public class OrderingServiceTest {
 
         FakeCheckoutProductClient productClient = new FakeCheckoutProductClient();
         productClient.products.put(PRODUCT_ID, new CheckoutProductSnapshot(
-                PRODUCT_ID,
-                "SHOP-E2E-001",
-                "Workshop Hoodie",
-                new BigDecimal("199000.00")
+                        PRODUCT_ID,
+                        "SHOP-E2E-001",
+                        "Workshop Hoodie",
+                        new BigDecimal("199000.00"),
+                        "products/33333333-3333-4333-8333-333333333333/hoodie.jpg"
         ));
         productClient.productIdsWithoutEnoughStock.add(PRODUCT_ID);
 
@@ -135,6 +139,7 @@ public class OrderingServiceTest {
                         PRODUCT_ID,
                         "SHOP-E2E-001",
                         "Workshop Hoodie",
+                        null,
                         new BigDecimal("199000.00"),
                         2
                 ))

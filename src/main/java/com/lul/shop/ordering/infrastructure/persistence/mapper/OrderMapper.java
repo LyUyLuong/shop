@@ -38,6 +38,7 @@ public interface OrderMapper {
                 entity.getProductId(),
                 entity.getProductSku(),
                 entity.getProductName(),
+                entity.getProductImageKey(),
                 entity.getUnitPrice(),
                 entity.getQuantity(),
                 entity.getLineTotal(),
@@ -77,6 +78,7 @@ public interface OrderMapper {
         entity.setProductId(item.getProductId());
         entity.setProductSku(item.getProductSku());
         entity.setProductName(item.getProductName());
+        entity.setProductImageKey(item.getProductImageKey());
         entity.setUnitPrice(item.getUnitPrice());
         entity.setQuantity(item.getQuantity());
         entity.setLineTotal(item.getLineTotal());

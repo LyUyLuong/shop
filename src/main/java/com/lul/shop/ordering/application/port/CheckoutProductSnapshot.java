@@ -8,7 +8,8 @@ public record CheckoutProductSnapshot(
         UUID id,
         String sku,
         String name,
-        BigDecimal price
+        BigDecimal price,
+        String imageKey
 ) {
 
     public CheckoutProductSnapshot {
@@ -29,5 +30,6 @@ public record CheckoutProductSnapshot(
 
         sku = sku.trim();
         name = name.trim();
+        imageKey = (imageKey == null || imageKey.isBlank()) ? null : imageKey.trim();
     }
 }
