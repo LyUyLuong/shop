@@ -1,13 +1,11 @@
 package com.lul.shop;
 
+import com.lul.shop.shared.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
-@SpringBootTest
-class ShopApplicationTests {
+class ShopApplicationTests extends PostgresIntegrationTest {
 
-	@Test
-	void contextLoads() {
-	}
-
+    @Test
+    void contextLoads() {
+    }
 }
