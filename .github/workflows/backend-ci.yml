@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+env:
+  AWS_REGION: ap-southeast-1
+  AWS_ACCOUNT_ID: "558891026882"
+  ECR_REPOSITORY: shop-backend
+  AWS_ROLE_TO_ASSUME: arn:aws:iam::558891026882:role/GitHubActionsShopBackendDeployRole
+
 jobs:
   backend-ci:
     name: Backend build and test
@@ -48,3 +54,59 @@ jobs:
           name: shop-backend-jar
           path: target/*.jar
           if-no-files-found: error
+
+  backend-image:
+    name: Build and push backend Docker image
+    runs-on: ubuntu-latest
+    needs: backend-ci
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials by OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Derive image tags
+        id: image
+        shell: bash
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}"
+
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "sha_image=${IMAGE_URI}:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "latest_image=${IMAGE_URI}:main-latest" >> "$GITHUB_OUTPUT"
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --tag "${{ steps.image.outputs.sha_image }}" \
+            --tag "${{ steps.image.outputs.latest_image }}" \
+            .
+
+      - name: Push Docker image
+        run: |
+          docker push "${{ steps.image.outputs.sha_image }}"
+          docker push "${{ steps.image.outputs.latest_image }}"
+
+      - name: Write deployment summary
+        run: |
+          {
+            echo "### Backend image pushed"
+            echo ""
+            echo "- SHA image: \`${{ steps.image.outputs.sha_image }}\`"
+            echo "- Latest image: \`${{ steps.image.outputs.latest_image }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
