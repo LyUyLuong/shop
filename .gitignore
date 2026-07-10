@@ -39,3 +39,10 @@ build/
 .env
 .env.*
 !.env.example
+
+*.drawio.bkp
+*.md
+*.png
+*.tar
+*.json
+diagrams
