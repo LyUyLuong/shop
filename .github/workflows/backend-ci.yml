@@ -61,6 +61,10 @@ jobs:
     needs: backend-ci
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
 
+    outputs:
+      image_tag: ${{ steps.image.outputs.image_tag }}
+      sha_image: ${{ steps.image.outputs.sha_image }}
+
     permissions:
       contents: read
       id-token: write
@@ -82,11 +86,14 @@ jobs:
         id: image
         shell: bash
         run: |
+          set -euo pipefail
+
           SHORT_SHA="${GITHUB_SHA::7}"
           ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}"
 
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "sha_image=${IMAGE_URI}:sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "latest_image=${IMAGE_URI}:main-latest" >> "$GITHUB_OUTPUT"
 
@@ -102,11 +109,159 @@ jobs:
           docker push "${{ steps.image.outputs.sha_image }}"
           docker push "${{ steps.image.outputs.latest_image }}"
 
-      - name: Write deployment summary
+      - name: Write image summary
         run: |
           {
             echo "### Backend image pushed"
             echo ""
             echo "- SHA image: \`${{ steps.image.outputs.sha_image }}\`"
             echo "- Latest image: \`${{ steps.image.outputs.latest_image }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  backend-deploy:
+    name: Deploy backend to EC2 through SSM
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: backend-image
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+
+    concurrency:
+      group: shop-backend-ec2-deploy
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      IMAGE_TAG: ${{ needs.backend-image.outputs.image_tag }}
+
+    steps:
+      - name: Validate deployment inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$EC2_INSTANCE_ID" ]]; then
+            echo "::error::Missing repository variable EC2_INSTANCE_ID"
+            exit 1
+          fi
+
+          if [[ -z "$IMAGE_TAG" ]]; then
+            echo "::error::backend-image did not provide image_tag"
+            exit 1
+          fi
+
+          echo "EC2 instance: $EC2_INSTANCE_ID"
+          echo "Image tag: $IMAGE_TAG"
+
+      - name: Configure AWS credentials by OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verify assumed deployment identity
+        run: aws sts get-caller-identity
+
+      - name: Deploy backend through SSM
+        id: deploy
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          COMMAND_ID="$(
+            aws ssm send-command \
+              --region "$AWS_REGION" \
+              --instance-ids "$EC2_INSTANCE_ID" \
+              --document-name "AWS-RunShellScript" \
+              --comment "Deploy shop backend ${IMAGE_TAG}" \
+              --timeout-seconds 600 \
+              --parameters "commands=[\"/home/ec2-user/shop/deploy-backend.sh ${IMAGE_TAG}\"]" \
+              --query "Command.CommandId" \
+              --output text
+          )"
+
+          echo "command_id=$COMMAND_ID" >> "$GITHUB_OUTPUT"
+          echo "SSM command ID: $COMMAND_ID"
+
+          FINAL_STATUS=""
+
+          for attempt in $(seq 1 90); do
+            set +e
+            STATUS_OUTPUT="$(
+              aws ssm get-command-invocation \
+                --region "$AWS_REGION" \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --query "Status" \
+                --output text 2>&1
+            )"
+            CLI_EXIT=$?
+            set -e
+
+            if [[ "$CLI_EXIT" -ne 0 ]]; then
+              if [[ "$STATUS_OUTPUT" == *"InvocationDoesNotExist"* ]]; then
+                echo "Waiting for SSM invocation registration: attempt=$attempt"
+                sleep 5
+                continue
+              fi
+
+              echo "$STATUS_OUTPUT"
+              exit "$CLI_EXIT"
+            fi
+
+            FINAL_STATUS="$STATUS_OUTPUT"
+            echo "SSM status: $FINAL_STATUS, attempt=$attempt"
+
+            case "$FINAL_STATUS" in
+              Success|Failed|Cancelled|TimedOut|Cancelling)
+                break
+                ;;
+              Pending|InProgress|Delayed|"")
+                sleep 5
+                ;;
+              *)
+                echo "Unexpected SSM status: $FINAL_STATUS"
+                sleep 5
+                ;;
+            esac
+          done
+
+          echo "status=${FINAL_STATUS:-UNKNOWN}" >> "$GITHUB_OUTPUT"
+
+          echo "::group::SSM standard output"
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query "StandardOutputContent" \
+            --output text || true
+          echo "::endgroup::"
+
+          echo "::group::SSM standard error"
+          aws ssm get-command-invocation \
+            --region "$AWS_REGION" \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --query "StandardErrorContent" \
+            --output text || true
+          echo "::endgroup::"
+
+          if [[ "$FINAL_STATUS" != "Success" ]]; then
+            echo "::error::Deployment failed with SSM status ${FINAL_STATUS:-UNKNOWN}"
+            exit 1
+          fi
+
+      - name: Write deployment summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Backend EC2 deployment"
+            echo ""
+            echo "- Image: \`${{ needs.backend-image.outputs.sha_image }}\`"
+            echo "- SSM command: \`${{ steps.deploy.outputs.command_id }}\`"
+            echo "- Status: \`${{ steps.deploy.outputs.status }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
