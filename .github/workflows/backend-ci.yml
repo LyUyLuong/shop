@@ -125,6 +125,9 @@ jobs:
     needs: backend-image
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
 
+    environment:
+      name: production-backend
+
     concurrency:
       group: shop-backend-ec2-deploy
       cancel-in-progress: false
