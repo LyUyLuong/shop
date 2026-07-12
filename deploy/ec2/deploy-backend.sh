@@ -77,22 +77,28 @@ if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
   docker rm -f "$CONTAINER_NAME"
 fi
 
-run_container "$IMAGE_URI" "$STREAM_NAME"
+if run_container "$IMAGE_URI" "$STREAM_NAME"; then
+  for attempt in {1..30}; do
+    if curl -fsS "$HEALTH_URL" >/tmp/shop-health.json; then
+      echo "$IMAGE_URI" > "$CURRENT_IMAGE_FILE"
+      echo "Deploy succeeded."
+      cat /tmp/shop-health.json
+      exit 0
+    fi
 
-for attempt in {1..30}; do
-  if curl -fsS "$HEALTH_URL" >/tmp/shop-health.json; then
-    echo "$IMAGE_URI" > "$CURRENT_IMAGE_FILE"
-    echo "Deploy succeeded."
-    cat /tmp/shop-health.json
-    exit 0
-  fi
+    echo "Waiting for health check... attempt=$attempt"
+    sleep 2
+  done
 
-  echo "Waiting for health check... attempt=$attempt"
-  sleep 2
-done
+  echo "Deploy health check failed."
+  docker logs --tail 80 "$CONTAINER_NAME" || true
+else
+  CANDIDATE_RUN_EXIT=$?
+  echo "Candidate container failed to start. docker run exit=$CANDIDATE_RUN_EXIT"
 
-echo "Deploy health check failed."
-docker logs --tail 80 "$CONTAINER_NAME" || true
+  # docker run can leave a created or stopped container behind.
+  docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+fi
 
 if [[ -n "$PREVIOUS_IMAGE" ]]; then
   ROLLBACK_STREAM="${STREAM_PREFIX}-$(date +%Y-%m-%dT%H-%M-%S)-rollback"
@@ -100,7 +106,11 @@ if [[ -n "$PREVIOUS_IMAGE" ]]; then
 
   docker rm -f "$CONTAINER_NAME" || true
   echo "$ROLLBACK_STREAM" > "$STREAM_FILE"
-  run_container "$PREVIOUS_IMAGE" "$ROLLBACK_STREAM"
+
+  if ! run_container "$PREVIOUS_IMAGE" "$ROLLBACK_STREAM"; then
+    echo "Rollback container failed to start."
+    exit 1
+  fi
 
   for attempt in {1..30}; do
     if curl -fsS "$HEALTH_URL" >/tmp/shop-health-rollback.json; then
