@@ -164,6 +164,42 @@ jobs:
 
           command -v jq >/dev/null
 
+          SCAN_REGISTERED=false
+
+          for attempt in $(seq 1 60); do
+            set +e
+            STATUS_OUTPUT="$(
+              aws ecr describe-image-scan-findings \
+                --region "$AWS_REGION" \
+                --repository-name "$ECR_REPOSITORY" \
+                --image-id "imageTag=$IMAGE_TAG" \
+                --query "imageScanStatus.status" \
+                --output text 2>&1
+            )"
+            CLI_EXIT=$?
+            set -e
+
+            if [[ "$CLI_EXIT" -eq 0 ]]; then
+              echo "ECR scan registered: status=$STATUS_OUTPUT attempt=$attempt"
+              SCAN_REGISTERED=true
+              break
+            fi
+
+            if [[ "$STATUS_OUTPUT" == *"ScanNotFoundException"* ]]; then
+              echo "Waiting for ECR scan registration: attempt=$attempt"
+              sleep 5
+              continue
+            fi
+
+            printf '%s\n' "$STATUS_OUTPUT" >&2
+            exit "$CLI_EXIT"
+          done
+
+          if [[ "$SCAN_REGISTERED" != "true" ]]; then
+            echo "::error::ECR scan was not registered within 5 minutes"
+            exit 1
+          fi
+
           aws ecr wait image-scan-complete \
             --region "$AWS_REGION" \
             --repository-name "$ECR_REPOSITORY" \
