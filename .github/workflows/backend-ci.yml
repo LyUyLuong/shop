@@ -164,54 +164,68 @@ jobs:
 
           command -v jq >/dev/null
 
-          SCAN_REGISTERED=false
+          SCAN_STATUS="NOT_REGISTERED"
+          SCAN_RESULT=""
 
           for attempt in $(seq 1 60); do
             set +e
-            STATUS_OUTPUT="$(
+            SCAN_OUTPUT="$(
               aws ecr describe-image-scan-findings \
                 --region "$AWS_REGION" \
                 --repository-name "$ECR_REPOSITORY" \
                 --image-id "imageTag=$IMAGE_TAG" \
-                --query "imageScanStatus.status" \
-                --output text 2>&1
+                --output json 2>&1
             )"
             CLI_EXIT=$?
             set -e
 
-            if [[ "$CLI_EXIT" -eq 0 ]]; then
-              echo "ECR scan registered: status=$STATUS_OUTPUT attempt=$attempt"
-              SCAN_REGISTERED=true
-              break
+            if [[ "$CLI_EXIT" -ne 0 ]]; then
+              if [[ "$SCAN_OUTPUT" == *"ScanNotFoundException"* ]]; then
+                echo "Waiting for ECR scan registration: attempt=$attempt"
+                sleep 5
+                continue
+              fi
+
+              printf '%s\n' "$SCAN_OUTPUT" >&2
+              exit "$CLI_EXIT"
             fi
 
-            if [[ "$STATUS_OUTPUT" == *"ScanNotFoundException"* ]]; then
-              echo "Waiting for ECR scan registration: attempt=$attempt"
-              sleep 5
-              continue
-            fi
+            SCAN_RESULT="$SCAN_OUTPUT"
+            SCAN_STATUS="$(
+              jq -r \
+                '.imageScanStatus.status // "NOT_READY"' \
+                <<< "$SCAN_RESULT"
+            )"
 
-            printf '%s\n' "$STATUS_OUTPUT" >&2
-            exit "$CLI_EXIT"
+            echo "ECR scan status=$SCAN_STATUS attempt=$attempt"
+
+            case "$SCAN_STATUS" in
+              COMPLETE)
+                break
+                ;;
+              IN_PROGRESS|PENDING|ACTIVE|NOT_READY)
+                sleep 5
+                ;;
+              FAILED|UNSUPPORTED_IMAGE|SCAN_ELIGIBILITY_EXPIRED|FINDINGS_UNAVAILABLE|LIMIT_EXCEEDED|IMAGE_ARCHIVED)
+                SCAN_DESCRIPTION="$(
+                  jq -r \
+                    '.imageScanStatus.description // "No description"' \
+                    <<< "$SCAN_RESULT"
+                )"
+                echo "::error::ECR scan ended with status=$SCAN_STATUS: $SCAN_DESCRIPTION"
+                exit 1
+                ;;
+              *)
+                echo "Waiting for recognized ECR scan status"
+                sleep 5
+                ;;
+            esac
           done
 
-          if [[ "$SCAN_REGISTERED" != "true" ]]; then
-            echo "::error::ECR scan was not registered within 5 minutes"
+          if [[ "$SCAN_STATUS" != "COMPLETE" ]]; then
+            echo "::error::ECR scan did not complete within 5 minutes; last status=$SCAN_STATUS"
             exit 1
           fi
-
-          aws ecr wait image-scan-complete \
-            --region "$AWS_REGION" \
-            --repository-name "$ECR_REPOSITORY" \
-            --image-id "imageTag=$IMAGE_TAG"
-
-          SCAN_RESULT="$(
-            aws ecr describe-image-scan-findings \
-              --region "$AWS_REGION" \
-              --repository-name "$ECR_REPOSITORY" \
-              --image-id "imageTag=$IMAGE_TAG" \
-              --output json
-          )"
 
           CRITICAL_COUNT="$(
             jq -r \
