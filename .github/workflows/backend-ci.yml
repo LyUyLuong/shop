@@ -16,7 +16,8 @@ env:
   AWS_REGION: ap-southeast-1
   AWS_ACCOUNT_ID: "558891026882"
   ECR_REPOSITORY: shop-backend
-  AWS_ROLE_TO_ASSUME: arn:aws:iam::558891026882:role/GitHubActionsShopBackendDeployRole
+  BACKEND_IMAGE_ROLE_ARN: ${{ vars.BACKEND_IMAGE_ROLE_ARN }}
+  BACKEND_DEPLOY_ROLE_ARN: ${{ vars.BACKEND_DEPLOY_ROLE_ARN }}
 
 jobs:
   backend-ci:
@@ -73,11 +74,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate image delivery inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "$BACKEND_IMAGE_ROLE_ARN" ]]; then
+            echo "::error::Missing repository variable BACKEND_IMAGE_ROLE_ARN"
+            exit 1
+          fi
+
       - name: Configure AWS credentials by OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ env.BACKEND_IMAGE_ROLE_ARN }}
+          role-session-name: shop-backend-image-${{ github.run_id }}
+          role-duration-seconds: 1800
           aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+          unset-current-credentials: true
+
+      - name: Verify assumed image identity
+        run: aws sts get-caller-identity
 
       - name: Login to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
@@ -146,6 +164,11 @@ jobs:
         run: |
           set -euo pipefail
 
+          if [[ -z "$BACKEND_DEPLOY_ROLE_ARN" ]]; then
+            echo "::error::Missing repository variable BACKEND_DEPLOY_ROLE_ARN"
+            exit 1
+          fi
+
           if [[ -z "$EC2_INSTANCE_ID" ]]; then
             echo "::error::Missing repository variable EC2_INSTANCE_ID"
             exit 1
@@ -162,8 +185,12 @@ jobs:
       - name: Configure AWS credentials by OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ env.BACKEND_DEPLOY_ROLE_ARN }}
+          role-session-name: shop-backend-deploy-${{ github.run_id }}
+          role-duration-seconds: 1800
           aws-region: ${{ env.AWS_REGION }}
+          allowed-account-ids: ${{ env.AWS_ACCOUNT_ID }}
+          unset-current-credentials: true
 
       - name: Verify assumed deployment identity
         run: aws sts get-caller-identity
