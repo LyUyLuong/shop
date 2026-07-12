@@ -31,7 +31,10 @@ fi
 
 command -v aws >/dev/null
 command -v docker >/dev/null
+command -v docker-credential-ecr-login >/dev/null
 command -v curl >/dev/null
+
+export AWS_ECR_DISABLE_CACHE=true
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
@@ -39,9 +42,6 @@ IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}"
 STREAM_NAME="${STREAM_PREFIX}-$(date +%Y-%m-%dT%H-%M-%S)-${IMAGE_TAG}"
 
 echo "Deploying image: $IMAGE_URI"
-
-aws ecr get-login-password --region "$REGION" \
-  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
 docker pull "$IMAGE_URI"
 
