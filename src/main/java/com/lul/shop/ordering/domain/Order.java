@@ -118,7 +118,7 @@ public class Order {
             case PAID -> targetStatus == OrderStatus.PACKING;
             case PACKING -> targetStatus == OrderStatus.SHIPPED;
             case SHIPPED -> targetStatus == OrderStatus.COMPLETED;
-            case COMPLETED, CANCELLED -> false;
+            case COMPLETED, CANCELLED, EXPIRED -> false;
         };
     }
 
