@@ -81,6 +81,28 @@ public class ProductRepositoryImpl implements ProductRepository {
 
     @Override
     @Transactional
+    public boolean increaseStock(UUID productId, int quantity) {
+        Objects.requireNonNull(
+                productId,
+                "productId must not be null"
+        );
+
+        if (quantity <= 0) {
+            throw new IllegalArgumentException(
+                    "quantity must be greater than 0"
+            );
+        }
+
+        int affectedRows = productJpaRepository.increaseStock(
+                productId,
+                quantity
+        );
+
+        return affectedRows == 1;
+    }
+
+    @Override
+    @Transactional
     public Product save(Product product) {
         ProductJpaEntity entity = productMapper.toEntity(product);
         ProductJpaEntity savedEntity = productJpaRepository.save(entity);

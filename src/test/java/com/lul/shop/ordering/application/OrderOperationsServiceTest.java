@@ -175,7 +175,8 @@ class OrderOperationsServiceTest {
                         null,
                         new BigDecimal("199000.00"),
                         1
-                ))
+                )),
+                Instant.parse("2026-07-16T10:00:00Z")
         );
 
         order.markPaid();
@@ -211,6 +212,20 @@ class OrderOperationsServiceTest {
         @Override
         public Optional<Order> findByIdAndUserId(UUID orderId, UUID userId) {
             return findById(orderId).filter(order -> order.belongsTo(userId));
+        }
+
+
+        @Override
+        public Optional<Order> findByIdForUpdate(UUID orderId) {
+            return findById(orderId);
+        }
+
+        @Override
+        public Optional<Order> findByIdAndUserIdForUpdate(
+                UUID orderId,
+                UUID userId
+        ) {
+            return findByIdAndUserId(orderId, userId);
         }
 
         @Override

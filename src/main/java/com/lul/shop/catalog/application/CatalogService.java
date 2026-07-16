@@ -185,6 +185,15 @@ public class CatalogService {
         return productRepository.decreaseStockIfEnough(productId, quantity);
     }
 
+    @Transactional
+    public boolean restoreStock(UUID productId, int quantity) {
+        return productRepository.increaseStock(
+                productId,
+                quantity
+        );
+    }
+
+
     public ProductImageContent getProductImage(UUID productId) {
         Product product = getProductOrThrow(productId);
 

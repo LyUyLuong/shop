@@ -16,6 +16,9 @@ import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
@@ -26,6 +29,8 @@ public class OrderingServiceTest {
     private static final UUID USER_ID = UUID.fromString("11111111-1111-4111-8111-111111111111");
     private static final UUID CART_ID = UUID.fromString("22222222-2222-4222-8222-222222222222");
     private static final UUID PRODUCT_ID = UUID.fromString("33333333-3333-4333-8333-333333333333");
+    private static final Instant NOW = Instant.parse("2026-07-16T10:00:00Z");
+    private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
 
     @Test
@@ -49,7 +54,12 @@ public class OrderingServiceTest {
                 "products/33333333-3333-4333-8333-333333333333/hoodie.jpg"
         ));
 
-        OrderingService service = new OrderingService(orderRepository, cartClient, productClient);
+        OrderingService service = new OrderingService(
+                orderRepository,
+                cartClient,
+                productClient,
+                CLOCK
+        );
 
         OrderResult result = service.placeOrder(new PlaceOrderCommand(USER_ID));
 
@@ -68,6 +78,8 @@ public class OrderingServiceTest {
         assertThat(result.items().get(0).lineTotal()).isEqualByComparingTo("398000.00");
 
         assertThat(orderRepository.savedOrders).hasSize(1);
+        assertThat(orderRepository.savedOrders.get(0).getExpiresAt())
+                .isEqualTo(NOW.plusSeconds(30 * 60));
         assertThat(cartClient.clearCartCalls).containsExactly(USER_ID);
         assertThat(productClient.stockDecreaseCalls)
                 .containsExactly(new StockDecreaseCall(PRODUCT_ID, 2));
@@ -82,7 +94,12 @@ public class OrderingServiceTest {
         );
         FakeCheckoutProductClient productClient = new FakeCheckoutProductClient();
 
-        OrderingService service = new OrderingService(orderRepository, cartClient, productClient);
+        OrderingService service = new OrderingService(
+                orderRepository,
+                cartClient,
+                productClient,
+                CLOCK
+        );
 
         assertThatThrownBy(() -> service.placeOrder(new PlaceOrderCommand(USER_ID)))
                 .isInstanceOfSatisfying(BusinessException.class, ex ->
@@ -108,15 +125,20 @@ public class OrderingServiceTest {
 
         FakeCheckoutProductClient productClient = new FakeCheckoutProductClient();
         productClient.products.put(PRODUCT_ID, new CheckoutProductSnapshot(
-                        PRODUCT_ID,
-                        "SHOP-E2E-001",
-                        "Workshop Hoodie",
-                        new BigDecimal("199000.00"),
-                        "products/33333333-3333-4333-8333-333333333333/hoodie.jpg"
+                PRODUCT_ID,
+                "SHOP-E2E-001",
+                "Workshop Hoodie",
+                new BigDecimal("199000.00"),
+                "products/33333333-3333-4333-8333-333333333333/hoodie.jpg"
         ));
         productClient.productIdsWithoutEnoughStock.add(PRODUCT_ID);
 
-        OrderingService service = new OrderingService(orderRepository, cartClient, productClient);
+        OrderingService service = new OrderingService(
+                orderRepository,
+                cartClient,
+                productClient,
+                CLOCK
+        );
 
         assertThatThrownBy(() -> service.placeOrder(new PlaceOrderCommand(USER_ID)))
                 .isInstanceOfSatisfying(BusinessException.class, ex ->
@@ -142,14 +164,16 @@ public class OrderingServiceTest {
                         null,
                         new BigDecimal("199000.00"),
                         2
-                ))
+                )),
+                NOW
         );
         orderRepository.save(order);
 
         OrderingService service = new OrderingService(
                 orderRepository,
                 new FakeCheckoutCartClient(new CheckoutCartSnapshot(CART_ID, USER_ID, List.of())),
-                new FakeCheckoutProductClient()
+                new FakeCheckoutProductClient(),
+                CLOCK
         );
 
         service.markOrderAsPaid(USER_ID, order.getId());
@@ -182,6 +206,19 @@ public class OrderingServiceTest {
         @Override
         public Optional<Order> findByIdAndUserId(UUID orderId, UUID userId) {
             return findById(orderId).filter(order -> order.belongsTo(userId));
+        }
+
+        @Override
+        public Optional<Order> findByIdForUpdate(UUID orderId) {
+            return findById(orderId);
+        }
+
+        @Override
+        public Optional<Order> findByIdAndUserIdForUpdate(
+                UUID orderId,
+                UUID userId
+        ) {
+            return findByIdAndUserId(orderId, userId);
         }
 
         @Override

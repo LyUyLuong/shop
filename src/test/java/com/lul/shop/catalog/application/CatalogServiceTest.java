@@ -288,6 +288,17 @@ class CatalogServiceTest {
                 .decreaseStockIfEnough(PRODUCT_ID, 3);
     }
 
+    @Test
+    void shouldDelegateStockRestorationToRepository() {
+        when(productRepository.increaseStock(PRODUCT_ID, 3))
+                .thenReturn(true);
+
+        boolean restored = service.restoreStock(PRODUCT_ID, 3);
+
+        assertThat(restored).isTrue();
+        verify(productRepository).increaseStock(PRODUCT_ID, 3);
+    }
+
     private static Product product(
             ProductStatus status,
             String imageKey
