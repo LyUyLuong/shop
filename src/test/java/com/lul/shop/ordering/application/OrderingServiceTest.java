@@ -151,39 +151,6 @@ public class OrderingServiceTest {
                 .containsExactly(new StockDecreaseCall(PRODUCT_ID, 2));
     }
 
-    @Test
-    void shouldChangePendingOrderToPaidWhenMarkOrderAsPaid() {
-        InMemoryOrderRepository orderRepository = new InMemoryOrderRepository();
-
-        Order order = Order.create(
-                USER_ID,
-                List.of(OrderItem.create(
-                        PRODUCT_ID,
-                        "SHOP-E2E-001",
-                        "Workshop Hoodie",
-                        null,
-                        new BigDecimal("199000.00"),
-                        2
-                )),
-                NOW
-        );
-        orderRepository.save(order);
-
-        OrderingService service = new OrderingService(
-                orderRepository,
-                new FakeCheckoutCartClient(new CheckoutCartSnapshot(CART_ID, USER_ID, List.of())),
-                new FakeCheckoutProductClient(),
-                CLOCK
-        );
-
-        service.markOrderAsPaid(USER_ID, order.getId());
-
-        Order savedOrder = orderRepository.findById(order.getId()).orElseThrow();
-        assertThat(savedOrder.getStatus()).isEqualTo(OrderStatus.PAID);
-    }
-
-
-
 
     private static class InMemoryOrderRepository implements OrderRepository {
 

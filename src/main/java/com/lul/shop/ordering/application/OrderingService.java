@@ -100,30 +100,6 @@ public class OrderingService {
         return toResult(order);
     }
 
-    @Transactional
-    public void markOrderAsPaid(UUID userId, UUID orderId) {
-        Objects.requireNonNull(userId, "userId must not be null");
-        Objects.requireNonNull(orderId, "orderId must not be null");
-
-        Order order = orderRepository.findByIdAndUserId(orderId, userId)
-                .orElseThrow(() -> new BusinessException(OrderingErrorCode.ORDER_NOT_FOUND));
-
-        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
-            throw new BusinessException(OrderingErrorCode.ORDER_NOT_PAYABLE);
-        }
-
-        order.markPaid();
-
-        Order savedOrder = orderRepository.save(order);
-
-        log.info(
-                "action=order.marked_paid userId={} orderId={} status={}",
-                savedOrder.getUserId(),
-                savedOrder.getId(),
-                savedOrder.getStatus()
-        );
-    }
-
     private OrderItem createOrderItem(CheckoutCartItemSnapshot cartItem) {
         CheckoutProductSnapshot product = checkoutProductClient.getProductForCheckout(
                 cartItem.productId()

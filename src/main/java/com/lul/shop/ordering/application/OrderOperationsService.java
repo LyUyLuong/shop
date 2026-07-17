@@ -9,15 +9,12 @@ import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderItem;
 import com.lul.shop.ordering.domain.OrderRepository;
 import com.lul.shop.ordering.domain.OrderSearchCriteria;
-import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.ordering.domain.OrderStatusHistory;
 import com.lul.shop.ordering.domain.OrderStatusHistoryRepository;
 import com.lul.shop.ordering.domain.OrderSummary;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.BusinessException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,92 +23,97 @@ import java.util.Objects;
 import java.util.UUID;
 
 @Service
-@Transactional(readOnly = true)
 public class OrderOperationsService {
 
-    private static final Logger log = LoggerFactory.getLogger(OrderOperationsService.class);
-
     private final OrderRepository orderRepository;
-    private final OrderStatusHistoryRepository orderStatusHistoryRepository;
+    private final OrderStatusHistoryRepository historyRepository;
+    private final OrderLifecycleService lifecycleService;
 
-    public OrderOperationsService(OrderRepository orderRepository,
-                                  OrderStatusHistoryRepository orderStatusHistoryRepository) {
+    public OrderOperationsService(
+            OrderRepository orderRepository,
+            OrderStatusHistoryRepository historyRepository,
+            OrderLifecycleService lifecycleService
+    ) {
         this.orderRepository = orderRepository;
-        this.orderStatusHistoryRepository = orderStatusHistoryRepository;
+        this.historyRepository = historyRepository;
+        this.lifecycleService = lifecycleService;
     }
 
-    public PageResult<AdminOrderSummaryResult> searchOrders(OrderSearchCriteria criteria, PageQuery pageQuery) {
-        Objects.requireNonNull(criteria, "criteria must not be null");
-        Objects.requireNonNull(pageQuery, "pageQuery must not be null");
+    @Transactional(readOnly = true)
+    public PageResult<AdminOrderSummaryResult> searchOrders(
+            OrderSearchCriteria criteria,
+            PageQuery pageQuery
+    ) {
+        Objects.requireNonNull(
+                criteria,
+                "criteria must not be null"
+        );
+        Objects.requireNonNull(
+                pageQuery,
+                "pageQuery must not be null"
+        );
 
-        return orderRepository.searchSummaries(criteria, pageQuery)
+        return orderRepository
+                .searchSummaries(criteria, pageQuery)
                 .map(this::toAdminSummaryResult);
     }
 
+    @Transactional(readOnly = true)
     public AdminOrderDetailResult getOrder(UUID orderId) {
-        Objects.requireNonNull(orderId, "orderId must not be null");
+        Objects.requireNonNull(
+                orderId,
+                "orderId must not be null"
+        );
 
-        Order order = getOrderOrThrow(orderId);
-
-        return toAdminDetailResult(order);
+        return toAdminDetailResult(
+                getOrderOrThrow(orderId)
+        );
     }
 
-    public List<OrderStatusHistoryResult> getStatusHistory(UUID orderId) {
-        Objects.requireNonNull(orderId, "orderId must not be null");
+    @Transactional(readOnly = true)
+    public List<OrderStatusHistoryResult> getStatusHistory(
+            UUID orderId
+    ) {
+        Objects.requireNonNull(
+                orderId,
+                "orderId must not be null"
+        );
 
         getOrderOrThrow(orderId);
 
-        return orderStatusHistoryRepository.findTimelineByOrderId(orderId)
+        return historyRepository
+                .findTimelineByOrderId(orderId)
                 .stream()
                 .map(this::toStatusHistoryResult)
                 .toList();
     }
 
-    @Transactional
-    public AdminOrderDetailResult changeStatus(ChangeOrderStatusCommand command) {
-        Objects.requireNonNull(command, "command must not be null");
-
-        Order order = getOrderOrThrow(command.orderId());
-
-        OrderStatus fromStatus = changeOrderStatus(order, command.targetStatus());
-
-        Order savedOrder = orderRepository.save(order);
-
-        OrderStatusHistory history = OrderStatusHistory.recordAdminChange(
-                savedOrder.getId(),
-                command.adminUserId(),
-                fromStatus,
-                savedOrder.getStatus(),
-                command.reason()
+    public AdminOrderDetailResult changeStatus(
+            ChangeOrderStatusCommand command
+    ) {
+        Objects.requireNonNull(
+                command,
+                "command must not be null"
         );
 
-        orderStatusHistoryRepository.save(history);
+        Order changedOrder =
+                lifecycleService.changeStatusAsAdmin(command);
 
-        log.info(
-                "action=order.status_changed orderId={} adminUserId={} fromStatus={} toStatus={} result=success",
-                savedOrder.getId(),
-                command.adminUserId(),
-                fromStatus,
-                savedOrder.getStatus()
-        );
-
-        return toAdminDetailResult(savedOrder);
-    }
-
-    private OrderStatus changeOrderStatus(Order order, OrderStatus targetStatus) {
-        try {
-            return order.changeStatus(targetStatus);
-        } catch (IllegalStateException ex) {
-            throw new BusinessException(OrderingErrorCode.INVALID_ORDER_STATUS_TRANSITION, ex.getMessage());
-        }
+        return toAdminDetailResult(changedOrder);
     }
 
     private Order getOrderOrThrow(UUID orderId) {
         return orderRepository.findById(orderId)
-                .orElseThrow(() -> new BusinessException(OrderingErrorCode.ORDER_NOT_FOUND));
+                .orElseThrow(() ->
+                        new BusinessException(
+                                OrderingErrorCode.ORDER_NOT_FOUND
+                        )
+                );
     }
 
-    private AdminOrderSummaryResult toAdminSummaryResult(OrderSummary summary) {
+    private AdminOrderSummaryResult toAdminSummaryResult(
+            OrderSummary summary
+    ) {
         return new AdminOrderSummaryResult(
                 summary.id(),
                 summary.userId(),
@@ -123,7 +125,9 @@ public class OrderOperationsService {
         );
     }
 
-    private AdminOrderDetailResult toAdminDetailResult(Order order) {
+    private AdminOrderDetailResult toAdminDetailResult(
+            Order order
+    ) {
         List<OrderItemResult> items = order.getItems()
                 .stream()
                 .map(this::toItemResult)
@@ -153,7 +157,9 @@ public class OrderOperationsService {
         );
     }
 
-    private OrderStatusHistoryResult toStatusHistoryResult(OrderStatusHistory history) {
+    private OrderStatusHistoryResult toStatusHistoryResult(
+            OrderStatusHistory history
+    ) {
         return new OrderStatusHistoryResult(
                 history.getId(),
                 history.getOrderId(),
