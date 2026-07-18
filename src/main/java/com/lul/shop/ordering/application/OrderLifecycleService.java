@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -188,21 +189,43 @@ public class OrderLifecycleService {
 
     @Transactional
     public Order expireBySystem(UUID orderId) {
+        Objects.requireNonNull(orderId, "orderId must not be null");
+
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new BusinessException(
+                        OrderingErrorCode.ORDER_NOT_FOUND
+                ));
+
+        return expireLockedOrderBySystem(
+                order,
+                Instant.now(clock)
+        );
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Order expireClaimedBySystem(
+            Order claimedOrder,
+            Instant expiredAt
+    ) {
         Objects.requireNonNull(
-                orderId,
-                "orderId must not be null"
+                claimedOrder,
+                "claimedOrder must not be null"
+        );
+        Objects.requireNonNull(
+                expiredAt,
+                "expiredAt must not be null"
         );
 
-        Order order = orderRepository
-                .findByIdForUpdate(orderId)
-                .orElseThrow(() ->
-                        new BusinessException(
-                                OrderingErrorCode.ORDER_NOT_FOUND
-                        )
-                );
+        return expireLockedOrderBySystem(
+                claimedOrder,
+                expiredAt
+        );
+    }
 
-        Instant expiredAt = Instant.now(clock);
-
+    private Order expireLockedOrderBySystem(
+            Order order,
+            Instant expiredAt
+    ) {
         if (!order.isExpiredAt(expiredAt)) {
             throw new BusinessException(
                     OrderingErrorCode.ORDER_NOT_EXPIRABLE
@@ -211,9 +234,7 @@ public class OrderLifecycleService {
 
         restoreInventory(order);
 
-        OrderStatus fromStatus =
-                order.expire(expiredAt);
-
+        OrderStatus fromStatus = order.expire(expiredAt);
         order.markInventoryReleased(expiredAt);
 
         Order savedOrder = orderRepository.save(order);
@@ -228,10 +249,8 @@ public class OrderLifecycleService {
         );
 
         log.info(
-                "action=order.status_changed "
-                        + "orderId={} actorType=SYSTEM "
-                        + "fromStatus={} toStatus={} "
-                        + "inventoryReleased={} result=success",
+                "action=order.status_changed orderId={} actorType=SYSTEM "
+                        + "fromStatus={} toStatus={} inventoryReleased={} result=success",
                 savedOrder.getId(),
                 fromStatus,
                 savedOrder.getStatus(),

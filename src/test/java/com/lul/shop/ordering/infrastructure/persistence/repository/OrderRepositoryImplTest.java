@@ -12,6 +12,7 @@ import com.lul.shop.shared.domain.PageResult;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.IllegalTransactionStateException;
@@ -288,6 +289,129 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
     }
 
     @Test
+    void shouldClaimOnlyExpiredPendingOrdersInDeadlineOrder() {
+        insertUser(USER_ID, "expiry-claim@example.com");
+        insertProduct(
+                PRODUCT_ID,
+                "EXPIRY-CLAIM-SKU",
+                "Expiry Claim Product",
+                "100000.00",
+                10
+        );
+
+        Instant cutoff =
+                Instant.parse("2026-07-17T03:00:00Z");
+
+        Order oldest = orderRepository.save(
+                singleItemOrder(
+                        USER_ID,
+                        PRODUCT_ID,
+                        "OLDEST-EXPIRED"
+                )
+        );
+
+        Order exactDeadline = orderRepository.save(
+                singleItemOrder(
+                        USER_ID,
+                        PRODUCT_ID,
+                        "EXACT-DEADLINE"
+                )
+        );
+
+        Order future = orderRepository.save(
+                singleItemOrder(
+                        USER_ID,
+                        PRODUCT_ID,
+                        "FUTURE-DEADLINE"
+                )
+        );
+
+        Order paid = orderRepository.save(
+                paidSingleItemOrder(
+                        USER_ID,
+                        PRODUCT_ID,
+                        "PAID-EXPIRED"
+                )
+        );
+
+        flushAndClear();
+
+        Instant createdAt = cutoff.minusSeconds(3600);
+
+        updateOrderLifecycle(
+                oldest.getId(),
+                OrderStatus.PENDING_PAYMENT,
+                createdAt,
+                cutoff.minusSeconds(300)
+        );
+        updateOrderLifecycle(
+                exactDeadline.getId(),
+                OrderStatus.PENDING_PAYMENT,
+                createdAt,
+                cutoff
+        );
+        updateOrderLifecycle(
+                future.getId(),
+                OrderStatus.PENDING_PAYMENT,
+                createdAt,
+                cutoff.plusSeconds(60)
+        );
+        updateOrderLifecycle(
+                paid.getId(),
+                OrderStatus.PAID,
+                createdAt,
+                cutoff.minusSeconds(600)
+        );
+
+        flushAndClear();
+
+        List<Order> limited =
+                orderRepository.claimExpiredForUpdate(
+                        cutoff,
+                        1
+                );
+
+        assertThat(limited)
+                .extracting(Order::getId)
+                .containsExactly(oldest.getId());
+
+        List<Order> claimed =
+                orderRepository.claimExpiredForUpdate(
+                        cutoff,
+                        10
+                );
+
+        assertThat(claimed)
+                .extracting(Order::getId)
+                .containsExactly(
+                        oldest.getId(),
+                        exactDeadline.getId()
+                );
+
+        assertThat(claimed)
+                .allSatisfy(order ->
+                        assertThat(order.getItems()).hasSize(1)
+                );
+    }
+
+    @Test
+    void shouldRejectNonPositiveExpiryClaimLimit() {
+        assertThatThrownBy(
+                () -> orderRepository.claimExpiredForUpdate(
+                        Instant.now(),
+                        0
+                )
+        )
+                .isInstanceOf(DataAccessException.class)
+                .hasRootCauseInstanceOf(
+                        IllegalArgumentException.class
+                )
+                .hasRootCauseMessage(
+                        "limit must be greater than 0"
+                );
+    }
+
+    @Test
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     void shouldRequireExistingTransactionForLockedAccess() {
         UUID orderId = UUID.randomUUID();
@@ -302,6 +426,39 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
                         USER_ID
                 )
         ).isInstanceOf(IllegalTransactionStateException.class);
+
+        assertThatThrownBy(
+                () -> orderRepository.claimExpiredForUpdate(
+                        Instant.now(),
+                        10
+                )
+        ).isInstanceOf(
+                IllegalTransactionStateException.class
+        );
+    }
+
+    private void updateOrderLifecycle(
+            UUID orderId,
+            OrderStatus status,
+            Instant createdAt,
+            Instant expiresAt
+    ) {
+        jdbcTemplate.update(
+                """
+                update orders
+                set status = ?,
+                    created_at = ?,
+                    updated_at = ?,
+                    expires_at = ?,
+                    inventory_released_at = null
+                where id = ?
+                """,
+                status.name(),
+                Timestamp.from(createdAt),
+                Timestamp.from(createdAt),
+                Timestamp.from(expiresAt),
+                orderId
+        );
     }
 
     private Order singleItemOrder(UUID userId, UUID productId, String productSku) {

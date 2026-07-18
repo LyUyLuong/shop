@@ -211,6 +211,16 @@ class OrderOperationsServiceTest {
             lastPageQuery = pageQuery;
             return searchResult;
         }
+
+        @Override
+        public List<Order> claimExpiredForUpdate(
+                Instant cutoff,
+                int limit
+        ) {
+            throw new UnsupportedOperationException(
+                    "claimExpiredForUpdate is not used in this test"
+            );
+        }
     }
 
     private static class FakeOrderStatusHistoryRepository implements OrderStatusHistoryRepository {

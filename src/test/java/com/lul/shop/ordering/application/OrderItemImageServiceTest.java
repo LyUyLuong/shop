@@ -182,6 +182,16 @@ class OrderItemImageServiceTest {
         public PageResult<OrderSummary> searchSummaries(OrderSearchCriteria criteria, PageQuery pageQuery) {
             throw new UnsupportedOperationException("searchSummaries is not used in OrderItemImageServiceTest");
         }
+
+        @Override
+        public List<Order> claimExpiredForUpdate(
+                Instant cutoff,
+                int limit
+        ) {
+            throw new UnsupportedOperationException(
+                    "claimExpiredForUpdate is not used in this test"
+            );
+        }
     }
 
     private static class FakeOrderItemImageClient implements OrderItemImageClient {

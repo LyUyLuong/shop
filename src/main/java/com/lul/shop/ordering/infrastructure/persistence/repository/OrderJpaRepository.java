@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -72,5 +73,22 @@ public interface OrderJpaRepository
     @EntityGraph(attributePaths = "items")
     List<OrderJpaEntity> findByUserIdOrderByCreatedAtDesc(
             UUID userId
+    );
+
+    @Query(
+            value = """
+                select order_row.id
+                from orders order_row
+                where order_row.status = 'PENDING_PAYMENT'
+                  and order_row.expires_at <= :cutoff
+                order by order_row.expires_at asc, order_row.id asc
+                limit :limit
+                for update of order_row skip locked
+                """,
+            nativeQuery = true
+    )
+    List<UUID> claimExpiredOrderIdsForUpdate(
+            @Param("cutoff") Instant cutoff,
+            @Param("limit") int limit
     );
 }

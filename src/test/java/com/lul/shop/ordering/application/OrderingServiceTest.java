@@ -201,6 +201,16 @@ public class OrderingServiceTest {
             throw new UnsupportedOperationException("searchSummaries is not used in OrderingServiceTest");
         }
 
+        @Override
+        public List<Order> claimExpiredForUpdate(
+                Instant cutoff,
+                int limit
+        ) {
+            throw new UnsupportedOperationException(
+                    "claimExpiredForUpdate is not used in this test"
+            );
+        }
+
     }
 
     private static class FakeCheckoutCartClient implements CheckoutCartClient {
@@ -226,6 +236,8 @@ public class OrderingServiceTest {
         public void clearCart(UUID userId) {
             clearCartCalls.add(userId);
         }
+
+
     }
 
     private static class FakeCheckoutProductClient implements CheckoutProductClient {

@@ -3,6 +3,7 @@ package com.lul.shop.ordering.domain;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,5 +28,10 @@ public interface OrderRepository {
     PageResult<OrderSummary> searchSummaries(
             OrderSearchCriteria criteria,
             PageQuery pageQuery
+    );
+
+    List<Order> claimExpiredForUpdate(
+            Instant cutoff,
+            int limit
     );
 }
