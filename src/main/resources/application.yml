@@ -5,6 +5,12 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
 
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULING_POOL_SIZE:3}
+      thread-name-prefix: shop-scheduler-
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -70,6 +76,13 @@ app:
     access-key: ${AWS_ACCESS_KEY:}
     secret-key: ${AWS_SECRET_KEY:}
 
+  ordering:
+    expiry:
+      enabled: ${ORDER_EXPIRY_ENABLED:false}
+      batch-size: ${ORDER_EXPIRY_BATCH_SIZE:20}
+      initial-delay-ms: ${ORDER_EXPIRY_INITIAL_DELAY_MS:60000}
+      fixed-delay-ms: ${ORDER_EXPIRY_FIXED_DELAY_MS:30000}
+
   outbox:
     publisher:
       enabled: ${OUTBOX_PUBLISHER_ENABLED:false}
@@ -77,6 +90,7 @@ app:
       max-batch-size: ${OUTBOX_MAX_BATCH_SIZE:10}
       max-retry-count: ${OUTBOX_MAX_RETRY_COUNT:5}
       fixed-delay-ms: ${OUTBOX_FIXED_DELAY_MS:10000}
+
   notification:
     consumer:
       enabled: ${NOTIFICATION_CONSUMER_ENABLED:false}
@@ -85,6 +99,7 @@ app:
       wait-time-seconds: ${NOTIFICATION_CONSUMER_WAIT_TIME_SECONDS:10}
       visibility-timeout-seconds: ${NOTIFICATION_CONSUMER_VISIBILITY_TIMEOUT_SECONDS:30}
       fixed-delay-ms: ${NOTIFICATION_CONSUMER_FIXED_DELAY_MS:10000}
+
 springdoc:
   api-docs:
     path: /v3/api-docs
