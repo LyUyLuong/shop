@@ -46,4 +46,16 @@ public interface ProductJpaRepository extends JpaRepository<ProductJpaEntity, UU
     int decreaseStockIfEnough(@Param("productId") UUID productId,
                               @Param("quantity") int quantity,
                               @Param("activeStatus") ProductStatus activeStatus);
+
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        update ProductJpaEntity p
+        set p.stockQuantity = p.stockQuantity + :quantity
+        where p.id = :productId
+        """)
+    int increaseStock(
+            @Param("productId") UUID productId,
+            @Param("quantity") int quantity
+    );
 }

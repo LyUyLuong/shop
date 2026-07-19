@@ -18,6 +18,8 @@ public interface ProductRepository {
 
     boolean decreaseStockIfEnough(UUID productId, int quantity);
 
+    boolean increaseStock(UUID productId, int quantity);
+
     Product save(Product product);
 
     PageResult<Product> search(ProductSearchCriteria criteria, PageQuery pageQuery);

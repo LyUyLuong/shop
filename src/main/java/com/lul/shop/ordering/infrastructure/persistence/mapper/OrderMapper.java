@@ -23,6 +23,8 @@ public interface OrderMapper {
                         .stream()
                         .map(this::toDomain)
                         .toList(),
+                entity.getExpiresAt(),
+                entity.getInventoryReleasedAt(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()
         );
@@ -57,6 +59,8 @@ public interface OrderMapper {
         entity.setUserId(order.getUserId());
         entity.setStatus(order.getStatus());
         entity.setTotalAmount(order.getTotalAmount());
+        entity.setExpiresAt(order.getExpiresAt());
+        entity.setInventoryReleasedAt(order.getInventoryReleasedAt());
         entity.setCreatedAt(order.getCreatedAt());
         entity.setUpdatedAt(order.getUpdatedAt());
 

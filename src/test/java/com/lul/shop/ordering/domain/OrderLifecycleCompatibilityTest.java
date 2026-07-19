@@ -21,46 +21,45 @@ class OrderLifecycleCompatibilityTest {
     private static final UUID PRODUCT_ID =
             UUID.fromString("33333333-3333-4333-8333-333333333333");
 
+    private static final Instant CREATED_AT =
+            Instant.parse("2026-07-16T00:00:00Z");
+
     @Test
     void shouldTreatReconstructedExpiredOrderAsTerminal() {
         Order order = reconstructedExpiredOrder();
 
         assertThat(order.canMoveTo(OrderStatus.PAID)).isFalse();
 
-        assertThatThrownBy(
-                () -> order.changeStatus(OrderStatus.PAID)
-        )
+        assertThatThrownBy(() -> order.changeStatus(OrderStatus.PAID))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage(
-                        "order status cannot move from EXPIRED to PAID"
-                );
+                .hasMessage("order status cannot move from EXPIRED to PAID");
 
         assertThat(order.getStatus()).isEqualTo(OrderStatus.EXPIRED);
     }
 
     @Test
-    void shouldNotActivatePendingToExpiredTransitionInCompatibilityRelease() {
-        Order order = Order.create(USER_ID, List.of(orderItem()));
+    void shouldKeepGenericPendingToExpiredTransitionDisabled() {
+        Order order = Order.create(
+                USER_ID,
+                List.of(orderItem()),
+                CREATED_AT
+        );
 
         assertThat(order.canMoveTo(OrderStatus.EXPIRED)).isFalse();
 
-        assertThatThrownBy(
-                () -> order.changeStatus(OrderStatus.EXPIRED)
-        )
+        assertThatThrownBy(() -> order.changeStatus(OrderStatus.EXPIRED))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage(
                         "order status cannot move from PENDING_PAYMENT to EXPIRED"
                 );
 
-        assertThat(order.getStatus())
-                .isEqualTo(OrderStatus.PENDING_PAYMENT);
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
     }
 
     @Test
     void shouldExposePaymentActorForFutureHistoryCompatibility() {
-        assertThat(
-                OrderStatusChangeActorType.valueOf("PAYMENT")
-        ).isEqualTo(OrderStatusChangeActorType.PAYMENT);
+        assertThat(OrderStatusChangeActorType.valueOf("PAYMENT"))
+                .isEqualTo(OrderStatusChangeActorType.PAYMENT);
     }
 
     private static Order reconstructedExpiredOrder() {
@@ -70,8 +69,10 @@ class OrderLifecycleCompatibilityTest {
                 OrderStatus.EXPIRED,
                 new BigDecimal("100000.00"),
                 List.of(orderItem()),
-                Instant.parse("2026-07-16T00:00:00Z"),
-                Instant.parse("2026-07-16T00:30:00Z")
+                CREATED_AT.plusSeconds(30 * 60),
+                null,
+                CREATED_AT,
+                CREATED_AT.plusSeconds(30 * 60)
         );
     }
 

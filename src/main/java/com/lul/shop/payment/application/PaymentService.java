@@ -41,31 +41,46 @@ public class PaymentService {
 
     @Transactional
     public PaymentResult payMock(PayOrderCommand command) {
-        Objects.requireNonNull(command, "command must not be null");
-
-        PayableOrderSnapshot order = payableOrderClient.getPayableOrder(
-                command.userId(),
-                command.orderId()
+        Objects.requireNonNull(
+                command,
+                "command must not be null"
         );
 
-        if (paymentRepository.existsByOrderId(order.orderId())) {
-            throw new BusinessException(PaymentErrorCode.PAYMENT_ALREADY_EXISTS);
+        PayableOrderSnapshot order =
+                payableOrderClient.getPayableOrder(
+                        command.userId(),
+                        command.orderId()
+                );
+
+        if (paymentRepository.existsByOrderId(
+                order.orderId()
+        )) {
+            throw new BusinessException(
+                    PaymentErrorCode.PAYMENT_ALREADY_EXISTS
+            );
         }
 
         if (!order.payable()) {
-            throw new BusinessException(PaymentErrorCode.ORDER_NOT_PAYABLE);
+            throw new BusinessException(
+                    PaymentErrorCode.ORDER_NOT_PAYABLE
+            );
         }
 
-        Payment payment = Payment.createSucceededMock(
-                order.orderId(),
-                order.userId(),
-                order.totalAmount(),
-                Instant.now(clock)
+        payableOrderClient.markOrderAsPaid(
+                command.userId(),
+                order.orderId()
         );
 
-        Payment savedPayment = paymentRepository.save(payment);
+        Payment payment =
+                Payment.createSucceededMock(
+                        order.orderId(),
+                        order.userId(),
+                        order.totalAmount(),
+                        Instant.now(clock)
+                );
 
-        payableOrderClient.markOrderAsPaid(command.userId(), order.orderId());
+        Payment savedPayment =
+                paymentRepository.save(payment);
 
         outboxService.recordOrderPaid(
                 order.orderId(),
@@ -74,7 +89,9 @@ public class PaymentService {
         );
 
         log.info(
-                "action=payment.succeeded userId={} orderId={} paymentId={} amount={} method={} status={}",
+                "action=payment.succeeded "
+                        + "userId={} orderId={} paymentId={} "
+                        + "amount={} method={} status={}",
                 savedPayment.getUserId(),
                 savedPayment.getOrderId(),
                 savedPayment.getId(),
@@ -84,7 +101,8 @@ public class PaymentService {
         );
 
         log.info(
-                "action=payment.order_paid_event_requested userId={} orderId={} paymentId={}",
+                "action=payment.order_paid_event_requested "
+                        + "userId={} orderId={} paymentId={}",
                 order.userId(),
                 order.orderId(),
                 savedPayment.getId()

@@ -99,6 +99,63 @@ class OrderStatusHistoryRepositoryImplTest extends PostgresIntegrationTest {
 
     }
 
+    @Test
+    void shouldPersistPaymentAndSystemHistoryActors() {
+        insertUser(USER_ID, "machine-history-user@example.com");
+
+        insertOrder(
+                ORDER_ID,
+                USER_ID,
+                OrderStatus.PAID
+        );
+        insertOrder(
+                OTHER_ORDER_ID,
+                USER_ID,
+                OrderStatus.EXPIRED
+        );
+
+        orderStatusHistoryRepository.save(
+                OrderStatusHistory.recordPaymentChange(
+                        ORDER_ID,
+                        OrderStatus.PENDING_PAYMENT,
+                        OrderStatus.PAID,
+                        "Payment succeeded"
+                )
+        );
+
+        orderStatusHistoryRepository.save(
+                OrderStatusHistory.recordSystemChange(
+                        OTHER_ORDER_ID,
+                        OrderStatus.PENDING_PAYMENT,
+                        OrderStatus.EXPIRED,
+                        "Payment deadline expired"
+                )
+        );
+
+        flushAndClear();
+
+        OrderStatusHistory paymentHistory =
+                orderStatusHistoryRepository
+                        .findTimelineByOrderId(ORDER_ID)
+                        .get(0);
+
+        OrderStatusHistory systemHistory =
+                orderStatusHistoryRepository
+                        .findTimelineByOrderId(OTHER_ORDER_ID)
+                        .get(0);
+
+        assertThat(paymentHistory.getActorType())
+                .isEqualTo(OrderStatusChangeActorType.PAYMENT);
+        assertThat(paymentHistory.getActorUserId()).isNull();
+        assertThat(paymentHistory.getToStatus())
+                .isEqualTo(OrderStatus.PAID);
+
+        assertThat(systemHistory.getActorType())
+                .isEqualTo(OrderStatusChangeActorType.SYSTEM);
+        assertThat(systemHistory.getActorUserId()).isNull();
+        assertThat(systemHistory.getToStatus())
+                .isEqualTo(OrderStatus.EXPIRED);
+    }
 
 
     private void insertUser(UUID userId, String email) {
@@ -115,13 +172,33 @@ class OrderStatusHistoryRepositoryImplTest extends PostgresIntegrationTest {
     }
 
     private void insertOrder(UUID orderId, UUID userId) {
+        insertOrder(
+                orderId,
+                userId,
+                OrderStatus.PAID
+        );
+    }
+
+    private void insertOrder(
+            UUID orderId,
+            UUID userId,
+            OrderStatus status
+    ) {
         jdbcTemplate.update(
                 """
-                insert into orders (id, user_id, status, total_amount, created_at, updated_at)
-                values (?, ?, 'PAID', 100000.00, now(), now())
+                insert into orders (
+                    id,
+                    user_id,
+                    status,
+                    total_amount,
+                    created_at,
+                    updated_at
+                )
+                values (?, ?, ?, 100000.00, now(), now())
                 """,
                 orderId,
-                userId
+                userId,
+                status.name()
         );
     }
 

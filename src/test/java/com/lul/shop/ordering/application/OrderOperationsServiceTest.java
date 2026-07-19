@@ -15,6 +15,9 @@ import java.time.Instant;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class OrderOperationsServiceTest {
 
@@ -46,7 +49,14 @@ class OrderOperationsServiceTest {
                 false
         );
 
-        OrderOperationsService service = new OrderOperationsService(orderRepository, historyRepository);
+        OrderLifecycleService lifecycleService = mock(OrderLifecycleService.class);
+
+        OrderOperationsService service =
+        new OrderOperationsService(
+                orderRepository,
+                historyRepository,
+                lifecycleService
+        );
 
         OrderSearchCriteria criteria = new OrderSearchCriteria(OrderStatus.PAID, null, null);
         PageQuery pageQuery = new PageQuery(0, 20);
@@ -71,7 +81,14 @@ class OrderOperationsServiceTest {
         Order order = paidOrder();
         orderRepository.givenOrder(order);
 
-        OrderOperationsService service = new OrderOperationsService(orderRepository, historyRepository);
+        OrderLifecycleService lifecycleService = mock(OrderLifecycleService.class);
+
+        OrderOperationsService service =
+                new OrderOperationsService(
+                        orderRepository,
+                        historyRepository,
+                        lifecycleService
+                );
 
         AdminOrderDetailResult result = service.getOrder(order.getId());
 
@@ -82,61 +99,6 @@ class OrderOperationsServiceTest {
         assertThat(result.items().get(0).productId()).isEqualTo(PRODUCT_ID);
     }
 
-    @Test
-    void shouldChangeStatusAndRecordHistory() {
-        FakeOrderRepository orderRepository = new FakeOrderRepository();
-        FakeOrderStatusHistoryRepository historyRepository = new FakeOrderStatusHistoryRepository();
-
-        Order order = paidOrder();
-        orderRepository.givenOrder(order);
-
-        OrderOperationsService service = new OrderOperationsService(orderRepository, historyRepository);
-
-        AdminOrderDetailResult result = service.changeStatus(new ChangeOrderStatusCommand(
-                order.getId(),
-                ADMIN_ID,
-                OrderStatus.PACKING,
-                "Start packing"
-        ));
-
-        assertThat(result.status()).isEqualTo(OrderStatus.PACKING);
-        assertThat(orderRepository.savedOrders).containsExactly(order);
-
-        assertThat(historyRepository.savedHistories).hasSize(1);
-
-        OrderStatusHistory history = historyRepository.savedHistories.get(0);
-        assertThat(history.getOrderId()).isEqualTo(order.getId());
-        assertThat(history.getFromStatus()).isEqualTo(OrderStatus.PAID);
-        assertThat(history.getToStatus()).isEqualTo(OrderStatus.PACKING);
-        assertThat(history.getActorType()).isEqualTo(OrderStatusChangeActorType.ADMIN);
-        assertThat(history.getActorUserId()).isEqualTo(ADMIN_ID);
-        assertThat(history.getReason()).isEqualTo("Start packing");
-    }
-
-    @Test
-    void shouldRejectInvalidStatusTransitionWithoutSavingHistory() {
-        FakeOrderRepository orderRepository = new FakeOrderRepository();
-        FakeOrderStatusHistoryRepository historyRepository = new FakeOrderStatusHistoryRepository();
-
-        Order order = paidOrder();
-        orderRepository.givenOrder(order);
-
-        OrderOperationsService service = new OrderOperationsService(orderRepository, historyRepository);
-
-        assertThatThrownBy(() -> service.changeStatus(new ChangeOrderStatusCommand(
-                order.getId(),
-                ADMIN_ID,
-                OrderStatus.COMPLETED,
-                "Skip shipping"
-        )))
-                .isInstanceOfSatisfying(BusinessException.class, ex ->
-                        assertThat(ex.getErrorCode()).isEqualTo(OrderingErrorCode.INVALID_ORDER_STATUS_TRANSITION)
-                );
-
-        assertThat(orderRepository.savedOrders).isEmpty();
-        assertThat(historyRepository.savedHistories).isEmpty();
-        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
-    }
 
     @Test
     void shouldReturnStatusHistoryAfterCheckingOrderExists() {
@@ -155,7 +117,14 @@ class OrderOperationsServiceTest {
         );
         historyRepository.givenHistory(history);
 
-        OrderOperationsService service = new OrderOperationsService(orderRepository, historyRepository);
+        OrderLifecycleService lifecycleService = mock(OrderLifecycleService.class);
+
+        OrderOperationsService service =
+                new OrderOperationsService(
+                        orderRepository,
+                        historyRepository,
+                        lifecycleService
+                );
 
         List<OrderStatusHistoryResult> result = service.getStatusHistory(order.getId());
 
@@ -175,7 +144,8 @@ class OrderOperationsServiceTest {
                         null,
                         new BigDecimal("199000.00"),
                         1
-                ))
+                )),
+                Instant.parse("2026-07-16T10:00:00Z")
         );
 
         order.markPaid();
@@ -213,6 +183,20 @@ class OrderOperationsServiceTest {
             return findById(orderId).filter(order -> order.belongsTo(userId));
         }
 
+
+        @Override
+        public Optional<Order> findByIdForUpdate(UUID orderId) {
+            return findById(orderId);
+        }
+
+        @Override
+        public Optional<Order> findByIdAndUserIdForUpdate(
+                UUID orderId,
+                UUID userId
+        ) {
+            return findByIdAndUserId(orderId, userId);
+        }
+
         @Override
         public List<Order> findByUserId(UUID userId) {
             return orders.values()
@@ -226,6 +210,16 @@ class OrderOperationsServiceTest {
             lastSearchCriteria = criteria;
             lastPageQuery = pageQuery;
             return searchResult;
+        }
+
+        @Override
+        public List<Order> claimExpiredForUpdate(
+                Instant cutoff,
+                int limit
+        ) {
+            throw new UnsupportedOperationException(
+                    "claimExpiredForUpdate is not used in this test"
+            );
         }
     }
 

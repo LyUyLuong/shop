@@ -7,12 +7,14 @@ import org.mapstruct.Mapper;
 @Mapper(componentModel = "spring")
 public interface OrderStatusHistoryMapper {
 
-    default OrderStatusHistory toDomain(OrderStatusHistoryJpaEntity entity) {
+    default OrderStatusHistory toDomain(
+            OrderStatusHistoryJpaEntity entity
+    ) {
         if (entity == null) {
             return null;
         }
 
-        return new OrderStatusHistory(
+        return OrderStatusHistory.reconstitute(
                 entity.getId(),
                 entity.getOrderId(),
                 entity.getFromStatus(),
@@ -24,12 +26,16 @@ public interface OrderStatusHistoryMapper {
         );
     }
 
-    default OrderStatusHistoryJpaEntity toEntity(OrderStatusHistory history) {
+    default OrderStatusHistoryJpaEntity toEntity(
+            OrderStatusHistory history
+    ) {
         if (history == null) {
             return null;
         }
 
-        OrderStatusHistoryJpaEntity entity = new OrderStatusHistoryJpaEntity();
+        OrderStatusHistoryJpaEntity entity =
+                new OrderStatusHistoryJpaEntity();
+
         entity.setId(history.getId());
         entity.setOrderId(history.getOrderId());
         entity.setFromStatus(history.getFromStatus());

@@ -13,11 +13,13 @@ import com.lul.shop.ordering.domain.OrderItem;
 import com.lul.shop.ordering.domain.OrderRepository;
 import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.shared.exception.BusinessException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -26,18 +28,21 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class OrderingService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrderingService.class);
+
     private final OrderRepository orderRepository;
     private final CheckoutCartClient checkoutCartClient;
     private final CheckoutProductClient checkoutProductClient;
-
-    private static final Logger log = LoggerFactory.getLogger(OrderingService.class);
+    private final Clock clock;
 
     public OrderingService(OrderRepository orderRepository,
                            CheckoutCartClient checkoutCartClient,
-                           CheckoutProductClient checkoutProductClient) {
+                           CheckoutProductClient checkoutProductClient,
+                           Clock clock) {
         this.orderRepository = orderRepository;
         this.checkoutCartClient = checkoutCartClient;
         this.checkoutProductClient = checkoutProductClient;
+        this.clock = clock;
     }
 
     @Transactional
@@ -55,7 +60,11 @@ public class OrderingService {
                 .map(this::createOrderItem)
                 .toList();
 
-        Order order = Order.create(command.userId(), orderItems);
+        Order order = Order.create(
+                command.userId(),
+                orderItems,
+                Instant.now(clock)
+        );
 
         Order savedOrder = orderRepository.save(order);
 
@@ -91,32 +100,10 @@ public class OrderingService {
         return toResult(order);
     }
 
-    @Transactional
-    public void markOrderAsPaid(UUID userId, UUID orderId) {
-        Objects.requireNonNull(userId, "userId must not be null");
-        Objects.requireNonNull(orderId, "orderId must not be null");
-
-        Order order = orderRepository.findByIdAndUserId(orderId, userId)
-                .orElseThrow(() -> new BusinessException(OrderingErrorCode.ORDER_NOT_FOUND));
-
-        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
-            throw new BusinessException(OrderingErrorCode.ORDER_NOT_PAYABLE);
-        }
-
-        order.markPaid();
-
-        Order savedOrder = orderRepository.save(order);
-
-        log.info(
-                "action=order.marked_paid userId={} orderId={} status={}",
-                savedOrder.getUserId(),
-                savedOrder.getId(),
-                savedOrder.getStatus()
-        );
-    }
-
     private OrderItem createOrderItem(CheckoutCartItemSnapshot cartItem) {
-        CheckoutProductSnapshot product = checkoutProductClient.getProductForCheckout(cartItem.productId());
+        CheckoutProductSnapshot product = checkoutProductClient.getProductForCheckout(
+                cartItem.productId()
+        );
 
         boolean stockDecreased = checkoutProductClient.decreaseStockIfEnough(
                 product.id(),

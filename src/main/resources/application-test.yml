@@ -7,6 +7,11 @@ spring:
   flyway:
     enabled: true
 
+  task:
+    scheduling:
+      pool:
+        size: 1
+
 logging:
   level:
     root: WARN
@@ -16,3 +21,7 @@ logging:
 app:
   jwt:
     secret: test-secret-key-must-be-at-least-32-bytes-long
+
+  ordering:
+    expiry:
+      enabled: false

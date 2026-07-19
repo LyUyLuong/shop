@@ -206,6 +206,88 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
                 .hasRootCauseInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void shouldIncreaseActiveProductStockUsingAtomicDatabaseArithmetic() {
+        Product product = saveProduct(
+                "TC-STOCK-RESTORE-ACTIVE",
+                "Active Restore Product",
+                "Active product stock restoration",
+                "150000.00",
+                5
+        );
+
+        flushAndClear();
+
+        boolean firstIncrease =
+                productRepository.increaseStock(product.getId(), 2);
+        boolean secondIncrease =
+                productRepository.increaseStock(product.getId(), 3);
+
+        flushAndClear();
+
+        Product reloaded =
+                productRepository.findById(product.getId()).orElseThrow();
+
+        assertThat(firstIncrease).isTrue();
+        assertThat(secondIncrease).isTrue();
+        assertThat(reloaded.getStockQuantity()).isEqualTo(10);
+    }
+
+    @Test
+    void shouldIncreaseStockWhenProductIsInactive() {
+        Product product = saveInactiveProduct(
+                "TC-STOCK-RESTORE-INACTIVE",
+                "Inactive Restore Product",
+                "Inactive product still requires restoration",
+                "150000.00",
+                5
+        );
+
+        flushAndClear();
+
+        boolean increased =
+                productRepository.increaseStock(product.getId(), 4);
+
+        flushAndClear();
+
+        Product reloaded =
+                productRepository.findById(product.getId()).orElseThrow();
+
+        assertThat(increased).isTrue();
+        assertThat(reloaded.getStatus())
+                .isEqualTo(ProductStatus.INACTIVE);
+        assertThat(reloaded.getStockQuantity()).isEqualTo(9);
+    }
+
+    @Test
+    void shouldReturnFalseWhenRestoringMissingProductStock() {
+        boolean increased = productRepository.increaseStock(
+                UUID.randomUUID(),
+                2
+        );
+
+        assertThat(increased).isFalse();
+    }
+
+    @Test
+    void shouldRejectNonPositiveStockIncreaseQuantity() {
+        UUID productId = UUID.randomUUID();
+
+        assertThatThrownBy(
+                () -> productRepository.increaseStock(productId, 0)
+        )
+                .isInstanceOf(InvalidDataAccessApiUsageException.class)
+                .hasMessageContaining("quantity must be greater than 0")
+                .hasRootCauseInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(
+                () -> productRepository.increaseStock(productId, -1)
+        )
+                .isInstanceOf(InvalidDataAccessApiUsageException.class)
+                .hasMessageContaining("quantity must be greater than 0")
+                .hasRootCauseInstanceOf(IllegalArgumentException.class);
+    }
+
     private Product saveProduct(String sku,
                                 String name,
                                 String description,

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -127,7 +128,8 @@ class OrderItemImageServiceTest {
                         imageKey,
                         new BigDecimal("199000.00"),
                         1
-                ))
+                )),
+                Instant.parse("2026-07-16T10:00:00Z")
         );
     }
 
@@ -156,6 +158,19 @@ class OrderItemImageServiceTest {
         }
 
         @Override
+        public Optional<Order> findByIdForUpdate(UUID orderId) {
+            return findById(orderId);
+        }
+
+        @Override
+        public Optional<Order> findByIdAndUserIdForUpdate(
+                UUID orderId,
+                UUID userId
+        ) {
+            return findByIdAndUserId(orderId, userId);
+        }
+
+        @Override
         public List<Order> findByUserId(UUID userId) {
             return orders.values()
                     .stream()
@@ -166,6 +181,16 @@ class OrderItemImageServiceTest {
         @Override
         public PageResult<OrderSummary> searchSummaries(OrderSearchCriteria criteria, PageQuery pageQuery) {
             throw new UnsupportedOperationException("searchSummaries is not used in OrderItemImageServiceTest");
+        }
+
+        @Override
+        public List<Order> claimExpiredForUpdate(
+                Instant cutoff,
+                int limit
+        ) {
+            throw new UnsupportedOperationException(
+                    "claimExpiredForUpdate is not used in this test"
+            );
         }
     }
 
