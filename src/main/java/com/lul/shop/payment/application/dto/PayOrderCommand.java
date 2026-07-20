@@ -5,10 +5,16 @@ import java.util.UUID;
 
 public record PayOrderCommand(
         UUID userId,
-        UUID orderId
+        UUID orderId,
+        String idempotencyKey
 ) {
+
     public PayOrderCommand {
         Objects.requireNonNull(userId, "userId must not be null");
         Objects.requireNonNull(orderId, "orderId must not be null");
+    }
+
+    public PayOrderCommand(UUID userId, UUID orderId) {
+        this(userId, orderId, null);
     }
 }

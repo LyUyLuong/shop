@@ -15,29 +15,47 @@ public class Cart {
     private List<CartItem> items;
     private Instant createdAt;
     private Instant updatedAt;
+    private long version;
 
-    public Cart(UUID id,
-                UUID userId,
-                List<CartItem> items,
-                Instant createdAt,
-                Instant updatedAt) {
+    public Cart(
+            UUID id,
+            UUID userId,
+            long version,
+            List<CartItem> items,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
         this.id = Objects.requireNonNull(id, "id must not be null");
-        this.userId = Objects.requireNonNull(userId, "userId must not be null");
-        this.items = new ArrayList<>(items == null ? List.of() : items);
+        this.userId = Objects.requireNonNull(
+                userId,
+                "userId must not be null"
+        );
+
+        if (version < 0) {
+            throw new IllegalArgumentException(
+                    "version must not be negative"
+            );
+        }
+
+        this.version = version;
+        this.items = new ArrayList<>(
+                items == null ? List.of() : items
+        );
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
+
 
     public static Cart create(UUID userId) {
         return new Cart(
                 UUID.randomUUID(),
                 userId,
+                0L,
                 List.of(),
                 null,
                 null
         );
     }
-
     public UUID getId() {
         return id;
     }
@@ -56,6 +74,10 @@ public class Cart {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public long getVersion() {
+        return version;
     }
 
     public boolean belongsTo(UUID userId) {

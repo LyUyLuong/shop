@@ -24,11 +24,19 @@ public class PaymentController {
     }
 
     @PostMapping("/mock")
-    public ApiResponse<PaymentResponse> payMock(@AuthenticationPrincipal Jwt jwt,
-                                                @Valid @RequestBody PayMockPaymentRequest request) {
+    public ApiResponse<PaymentResponse> payMock(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(
+                    name = "Idempotency-Key",
+                    required = false
+            )
+            String idempotencyKey,
+            @Valid @RequestBody PayMockPaymentRequest request
+    ) {
         PayOrderCommand command = new PayOrderCommand(
                 currentUserId(jwt),
-                request.orderId()
+                request.orderId(),
+                idempotencyKey
         );
 
         PaymentResult result = paymentService.payMock(command);

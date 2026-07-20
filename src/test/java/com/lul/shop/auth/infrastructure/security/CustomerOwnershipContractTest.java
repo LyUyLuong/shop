@@ -15,6 +15,7 @@ import com.lul.shop.payment.application.PaymentService;
 import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.presentation.PaymentController;
 import com.lul.shop.payment.presentation.dto.request.PayMockPaymentRequest;
+import com.lul.shop.ordering.presentation.dto.request.PlaceOrderRequest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -49,6 +50,14 @@ class CustomerOwnershipContractTest {
 
     private static final UUID PAYMENT_ID =
             UUID.fromString("66666666-6666-4666-8666-666666666666");
+
+    private static final UUID CART_ID =
+            UUID.fromString("77777777-7777-4777-8777-777777777777");
+
+    private static final long CART_VERSION = 5L;
+
+    private static final String ORDER_KEY = "order-attempt-0001";
+    private static final String PAYMENT_KEY = "payment-attempt-0001";
 
     @Mock
     private CartService cartService;
@@ -140,12 +149,34 @@ class CustomerOwnershipContractTest {
     void shouldPlaceOrderForJwtSubject() {
         RuntimeException probe = probe();
 
+        PlaceOrderCommand expected = new PlaceOrderCommand(
+                USER_ID,
+                CART_ID,
+                CART_VERSION,
+                ORDER_KEY
+        );
+
+        when(orderingService.placeOrder(expected)).thenThrow(probe);
+
+        assertThatThrownBy(() -> orderingController.placeOrder(
+                jwt(),
+                ORDER_KEY,
+                new PlaceOrderRequest(CART_ID, CART_VERSION)
+        )).isSameAs(probe);
+
+        verify(orderingService).placeOrder(expected);
+    }
+
+    @Test
+    void shouldPreserveLegacyPlaceOrderContract() {
+        RuntimeException probe = probe();
         PlaceOrderCommand expected = new PlaceOrderCommand(USER_ID);
 
         when(orderingService.placeOrder(expected)).thenThrow(probe);
 
-        assertThatThrownBy(() -> orderingController.placeOrder(jwt()))
-                .isSameAs(probe);
+        assertThatThrownBy(() ->
+                orderingController.placeOrder(jwt(), null, null)
+        ).isSameAs(probe);
 
         verify(orderingService).placeOrder(expected);
     }
@@ -207,12 +238,31 @@ class CustomerOwnershipContractTest {
         RuntimeException probe = probe();
 
         PayOrderCommand expected =
+                new PayOrderCommand(USER_ID, ORDER_ID, PAYMENT_KEY);
+
+        when(paymentService.payMock(expected)).thenThrow(probe);
+
+        assertThatThrownBy(() -> paymentController.payMock(
+                jwt(),
+                PAYMENT_KEY,
+                new PayMockPaymentRequest(ORDER_ID)
+        )).isSameAs(probe);
+
+        verify(paymentService).payMock(expected);
+    }
+
+    @Test
+    void shouldPreserveLegacyPaymentContract() {
+        RuntimeException probe = probe();
+
+        PayOrderCommand expected =
                 new PayOrderCommand(USER_ID, ORDER_ID);
 
         when(paymentService.payMock(expected)).thenThrow(probe);
 
         assertThatThrownBy(() -> paymentController.payMock(
                 jwt(),
+                null,
                 new PayMockPaymentRequest(ORDER_ID)
         )).isSameAs(probe);
 

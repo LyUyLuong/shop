@@ -156,6 +156,7 @@ public class CartService {
         return new CartResult(
                 cart.getId(),
                 cart.getUserId(),
+                cart.getVersion(),
                 cart.getItems()
                         .stream()
                         .map(this::toItemResult)

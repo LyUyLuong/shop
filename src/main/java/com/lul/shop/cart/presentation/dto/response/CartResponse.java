@@ -9,6 +9,7 @@ import java.util.UUID;
 public record CartResponse(
         UUID id,
         UUID userId,
+        long version,
         List<CartItemResponse> items,
         Instant createdAt,
         Instant updatedAt
@@ -18,6 +19,7 @@ public record CartResponse(
         return new CartResponse(
                 result.id(),
                 result.userId(),
+                result.version(),
                 result.items()
                         .stream()
                         .map(CartItemResponse::from)

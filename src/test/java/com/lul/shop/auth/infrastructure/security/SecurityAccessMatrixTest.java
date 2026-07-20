@@ -60,6 +60,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 
 @ExtendWith(SpringExtension.class)
 @WebMvcTest(controllers = {
@@ -179,7 +180,8 @@ class SecurityAccessMatrixTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.id")
-                        .value(PRODUCT_ID.toString()));
+                        .value(PRODUCT_ID.toString()))
+                .andExpect(jsonPath("$.data.version").value(4));
 
         mockMvc.perform(get(
                         "/api/v1/products/{productId}/image",
@@ -301,19 +303,27 @@ class SecurityAccessMatrixTest {
 
     @Test
     void shouldAllowCorsPreflightWithoutJwt() throws Exception {
-        mockMvc.perform(options("/api/v1/cart")
+        mockMvc.perform(options("/api/v1/orders")
                         .header(
                                 HttpHeaders.ORIGIN,
                                 "http://localhost:5173"
                         )
                         .header(
                                 HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD,
-                                "GET"
+                                "POST"
+                        )
+                        .header(
+                                HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                "Content-Type, Idempotency-Key"
                         ))
                 .andExpect(status().isOk())
                 .andExpect(header().string(
                         HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN,
                         "http://localhost:5173"
+                ))
+                .andExpect(header().string(
+                        HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                        containsString("Idempotency-Key")
                 ));
     }
 
@@ -402,6 +412,7 @@ class SecurityAccessMatrixTest {
     private static ProductResult productResult() {
         return new ProductResult(
                 PRODUCT_ID,
+                4L,
                 "SKU-001",
                 "Running Shoes",
                 "Daily shoes",

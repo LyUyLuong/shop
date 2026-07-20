@@ -7,6 +7,8 @@ import com.lul.shop.cart.infrastructure.persistence.mapper.CartMapper;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -16,11 +18,16 @@ public class CartRepositoryImpl implements CartRepository {
 
     private final CartJpaRepository cartJpaRepository;
     private final CartMapper cartMapper;
+    private final Clock clock;
 
-    public CartRepositoryImpl(CartJpaRepository cartJpaRepository,
-                              CartMapper cartMapper) {
+    public CartRepositoryImpl(
+            CartJpaRepository cartJpaRepository,
+            CartMapper cartMapper,
+            Clock clock
+    ) {
         this.cartJpaRepository = cartJpaRepository;
         this.cartMapper = cartMapper;
+        this.clock = clock;
     }
 
     @Override
@@ -33,8 +40,23 @@ public class CartRepositoryImpl implements CartRepository {
     @Transactional
     public Cart save(Cart cart) {
         CartJpaEntity entity = cartMapper.toEntity(cart);
-        CartJpaEntity savedEntity = cartJpaRepository.save(entity);
+
+        entity.setUpdatedAt(nextMutationTime(cart));
+
+        CartJpaEntity savedEntity =
+                cartJpaRepository.saveAndFlush(entity);
 
         return cartMapper.toDomain(savedEntity);
+    }
+
+    private Instant nextMutationTime(Cart cart) {
+        Instant now = clock.instant();
+        Instant current = cart.getUpdatedAt();
+
+        if (current == null || now.isAfter(current)) {
+            return now;
+        }
+
+        return current.plusNanos(1_000);
     }
 }

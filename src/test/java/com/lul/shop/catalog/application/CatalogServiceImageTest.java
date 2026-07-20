@@ -38,6 +38,8 @@ class CatalogServiceImageTest {
     private static final String IMAGE_KEY =
             "products/22222222-2222-4222-8222-222222222222/product.webp";
 
+    private static final long PRODUCT_VERSION = 4L;
+
     @Mock
     private ProductRepository productRepository;
 
@@ -79,6 +81,7 @@ class CatalogServiceImageTest {
                         + PRODUCT_ID
                         + "/image"
         );
+        assertThat(result.version()).isEqualTo(PRODUCT_VERSION);
 
         verify(productImageStorage).store(PRODUCT_ID, command);
         verify(productRepository).save(product);
@@ -247,6 +250,7 @@ class CatalogServiceImageTest {
     private static Product product(String imageKey) {
         return new Product(
                 PRODUCT_ID,
+                PRODUCT_VERSION,
                 "SKU-001",
                 "Running Shoes",
                 "Daily shoes",

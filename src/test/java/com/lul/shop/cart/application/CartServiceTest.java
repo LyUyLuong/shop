@@ -36,6 +36,7 @@ public class CartServiceTest {
         assertThat(result.userId()).isEqualTo(USER_ID);
         assertThat(result.items()).isEmpty();
         assertThat(cartRepository.savedCarts).hasSize(1);
+        assertThat(result.version()).isZero();
 
     }
 
@@ -76,6 +77,7 @@ public class CartServiceTest {
         assertThat(result.items().get(0).id()).isEqualTo(ITEM_ID);
         assertThat(result.items().get(0).productId()).isEqualTo(PRODUCT_ID);
         assertThat(result.items().get(0).quantity()).isEqualTo(5);
+        assertThat(result.version()).isEqualTo(7L);
 
         assertThat(cartRepository.savedCarts).hasSize(1);
 
@@ -211,6 +213,7 @@ public class CartServiceTest {
         return new Cart(
                 CART_ID,
                 USER_ID,
+                7L,
                 List.of(new CartItem(
                         ITEM_ID,
                         PRODUCT_ID,

@@ -32,6 +32,8 @@ class CatalogServiceTest {
     private static final String IMAGE_KEY =
             "products/22222222-2222-4222-8222-222222222222/product.webp";
 
+    private static final long PRODUCT_VERSION = 4L;
+
     @Mock
     private ProductRepository productRepository;
 
@@ -72,6 +74,7 @@ class CatalogServiceTest {
         assertThat(result.stockQuantity()).isEqualTo(10);
         assertThat(result.status()).isEqualTo(ProductStatus.ACTIVE);
         assertThat(result.imageUrl()).isNull();
+        assertThat(result.version()).isZero();
 
         verify(productRepository).existsBySku("SKU-001");
         verify(productRepository).save(any(Product.class));
@@ -127,6 +130,7 @@ class CatalogServiceTest {
         assertThat(result.description()).isEqualTo("Updated description");
         assertThat(result.price()).isEqualByComparingTo("249000.00");
         assertThat(result.stockQuantity()).isEqualTo(20);
+        assertThat(result.version()).isEqualTo(PRODUCT_VERSION);
 
         verify(productRepository).save(product);
     }
@@ -305,6 +309,7 @@ class CatalogServiceTest {
     ) {
         return new Product(
                 PRODUCT_ID,
+                PRODUCT_VERSION,
                 "SKU-001",
                 "Running Shoes",
                 "Daily shoes",

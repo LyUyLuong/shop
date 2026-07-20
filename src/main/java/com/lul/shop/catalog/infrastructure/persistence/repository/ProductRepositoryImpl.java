@@ -105,7 +105,7 @@ public class ProductRepositoryImpl implements ProductRepository {
     @Transactional
     public Product save(Product product) {
         ProductJpaEntity entity = productMapper.toEntity(product);
-        ProductJpaEntity savedEntity = productJpaRepository.save(entity);
+        ProductJpaEntity savedEntity = productJpaRepository.saveAndFlush(entity);
 
         return productMapper.toDomain(savedEntity);
     }

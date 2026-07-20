@@ -27,6 +27,7 @@ public class CorsConfig {
                 "Authorization",
                 "Content-Type",
                 "Accept",
+                "Idempotency-Key",
                 "X-Request-Id",
                 "X-Correlation-Id"
         ));

@@ -7,6 +7,24 @@ public record UpdateProductCommand(
         String name,
         String description,
         BigDecimal price,
-        int stockQuantity
+        int stockQuantity,
+        Long expectedVersion
 ) {
+
+    public UpdateProductCommand(
+            String sku,
+            String name,
+            String description,
+            BigDecimal price,
+            int stockQuantity
+    ) {
+        this(
+                sku,
+                name,
+                description,
+                price,
+                stockQuantity,
+                null
+        );
+    }
 }
