@@ -11,6 +11,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -49,6 +50,10 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
 
         assertThat(foundBySku.getId()).isEqualTo(saved.getId());
         assertThat(foundBySku.getSku()).isEqualTo("TC-FIND-001");
+
+        assertThat(saved.getVersion()).isZero();
+        assertThat(foundById.getVersion()).isZero();
+        assertThat(foundBySku.getVersion()).isZero();
     }
 
     @Test
@@ -152,6 +157,8 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
 
         assertThat(decreased).isTrue();
         assertThat(reloaded.getStockQuantity()).isEqualTo(2);
+        assertThat(reloaded.getVersion()).isEqualTo(1L);
+
     }
 
     @Test
@@ -174,6 +181,8 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
 
         assertThat(decreased).isFalse();
         assertThat(reloaded.getStockQuantity()).isEqualTo(2);
+
+        assertThat(reloaded.getVersion()).isZero();
     }
 
     @Test
@@ -196,6 +205,8 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
 
         assertThat(decreased).isFalse();
         assertThat(reloaded.getStockQuantity()).isEqualTo(5);
+
+        assertThat(reloaded.getVersion()).isZero();
     }
 
     @Test
@@ -231,6 +242,8 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
         assertThat(firstIncrease).isTrue();
         assertThat(secondIncrease).isTrue();
         assertThat(reloaded.getStockQuantity()).isEqualTo(10);
+
+        assertThat(reloaded.getVersion()).isEqualTo(2L);
     }
 
     @Test
@@ -257,6 +270,8 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
         assertThat(reloaded.getStatus())
                 .isEqualTo(ProductStatus.INACTIVE);
         assertThat(reloaded.getStockQuantity()).isEqualTo(9);
+
+        assertThat(reloaded.getVersion()).isEqualTo(1L);
     }
 
     @Test
@@ -286,6 +301,86 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
                 .isInstanceOf(InvalidDataAccessApiUsageException.class)
                 .hasMessageContaining("quantity must be greater than 0")
                 .hasRootCauseInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void shouldIncrementVersionWhenProductDetailsChange() {
+        Product created = saveProduct(
+                "TC-VERSION-001",
+                "Versioned Product",
+                "Product version test",
+                "150000.00",
+                5
+        );
+
+        assertThat(created.getVersion()).isZero();
+
+        flushAndClear();
+
+        Product loaded = productRepository.findById(created.getId())
+                .orElseThrow();
+
+        flushAndClear();
+
+        loaded.updateDetails(
+                loaded.getSku(),
+                "Updated Versioned Product",
+                loaded.getDescription(),
+                loaded.getPrice(),
+                loaded.getStockQuantity()
+        );
+
+        Product updated = productRepository.save(loaded);
+
+        assertThat(updated.getVersion()).isEqualTo(1L);
+        assertThat(updated.getName())
+                .isEqualTo("Updated Versioned Product");
+
+        flushAndClear();
+
+        Product reloaded = productRepository.findById(created.getId())
+                .orElseThrow();
+
+        assertThat(reloaded.getVersion()).isEqualTo(1L);
+    }
+
+    @Test
+    void shouldRejectStaleProductAfterAtomicStockDecrease() {
+        Product created = saveProduct(
+                "TC-VERSION-STALE",
+                "Stale Product",
+                "Stale product test",
+                "150000.00",
+                5
+        );
+
+        flushAndClear();
+
+        Product staleSnapshot = productRepository.findById(created.getId())
+                .orElseThrow();
+
+        flushAndClear();
+
+        boolean decreased = productRepository.decreaseStockIfEnough(
+                created.getId(),
+                2
+        );
+
+        assertThat(decreased).isTrue();
+
+        flushAndClear();
+
+        staleSnapshot.updateDetails(
+                staleSnapshot.getSku(),
+                "Stale Admin Update",
+                staleSnapshot.getDescription(),
+                staleSnapshot.getPrice(),
+                staleSnapshot.getStockQuantity()
+        );
+
+        assertThatThrownBy(
+                () -> productRepository.save(staleSnapshot)
+        ).isInstanceOf(OptimisticLockingFailureException.class);
     }
 
     private Product saveProduct(String sku,

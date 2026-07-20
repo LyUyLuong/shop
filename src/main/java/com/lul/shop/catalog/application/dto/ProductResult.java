@@ -8,6 +8,7 @@ import java.util.UUID;
 
 public record ProductResult(
         UUID id,
+        long version,
         String sku,
         String name,
         String description,

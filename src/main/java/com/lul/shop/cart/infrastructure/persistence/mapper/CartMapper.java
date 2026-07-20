@@ -6,6 +6,8 @@ import com.lul.shop.cart.infrastructure.persistence.entity.CartItemJpaEntity;
 import com.lul.shop.cart.infrastructure.persistence.entity.CartJpaEntity;
 import org.mapstruct.Mapper;
 
+import java.util.Objects;
+
 @Mapper(componentModel = "spring")
 public interface CartMapper {
 
@@ -14,9 +16,15 @@ public interface CartMapper {
             return null;
         }
 
+        long version = Objects.requireNonNull(
+                entity.getVersion(),
+                "persisted cart version must not be null"
+        );
+
         return new Cart(
                 entity.getId(),
                 entity.getUserId(),
+                version,
                 entity.getItems()
                         .stream()
                         .map(this::toDomain)
@@ -25,7 +33,6 @@ public interface CartMapper {
                 entity.getUpdatedAt()
         );
     }
-
     default CartItem toDomain(CartItemJpaEntity entity) {
         if (entity == null) {
             return null;
@@ -48,6 +55,9 @@ public interface CartMapper {
         CartJpaEntity entity = new CartJpaEntity();
         entity.setId(cart.getId());
         entity.setUserId(cart.getUserId());
+        if (cart.getCreatedAt() != null) {
+            entity.setVersion(cart.getVersion());
+        }
         entity.setCreatedAt(cart.getCreatedAt());
         entity.setUpdatedAt(cart.getUpdatedAt());
 

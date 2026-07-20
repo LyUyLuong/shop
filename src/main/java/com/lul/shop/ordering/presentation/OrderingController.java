@@ -5,8 +5,10 @@ import com.lul.shop.ordering.application.OrderingService;
 import com.lul.shop.ordering.application.dto.OrderItemImageContent;
 import com.lul.shop.ordering.application.dto.OrderResult;
 import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
+import com.lul.shop.ordering.presentation.dto.request.PlaceOrderRequest;
 import com.lul.shop.ordering.presentation.dto.response.OrderResponse;
 import com.lul.shop.shared.api.ApiResponse;
+import jakarta.validation.Valid;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -36,12 +38,28 @@ public class OrderingController {
     }
 
     @PostMapping
-    public ApiResponse<OrderResponse> placeOrder(@AuthenticationPrincipal Jwt jwt) {
-        PlaceOrderCommand command = new PlaceOrderCommand(currentUserId(jwt));
+    public ApiResponse<OrderResponse> placeOrder(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(
+                    name = "Idempotency-Key",
+                    required = false
+            )
+            String idempotencyKey,
+            @Valid @RequestBody(required = false)
+            PlaceOrderRequest request
+    ) {
+        PlaceOrderCommand command = new PlaceOrderCommand(
+                currentUserId(jwt),
+                request == null ? null : request.cartId(),
+                request == null ? null : request.cartVersion(),
+                idempotencyKey
+        );
 
         OrderResult result = orderingService.placeOrder(command);
 
-        return ApiResponse.ok(OrderResponse.from(result, orderItemImageUrlResolver));
+        return ApiResponse.ok(
+                OrderResponse.from(result, orderItemImageUrlResolver)
+        );
     }
 
     @GetMapping

@@ -9,6 +9,7 @@ import java.util.UUID;
 public class Product {
 
     private UUID id;
+    private long version;
     private String sku;
     private String name;
     private String description;
@@ -20,18 +21,29 @@ public class Product {
     private Instant createdAt;
     private Instant updatedAt;
 
-    public Product(UUID id,
-                   String sku,
-                   String name,
-                   String description,
-                   BigDecimal price,
-                   int stockQuantity,
-                   ProductStatus status,
-                   String imageKey,
-                   String imageUrl,
-                   Instant createdAt,
-                   Instant updatedAt) {
+    public Product(
+            UUID id,
+            long version,
+            String sku,
+            String name,
+            String description,
+            BigDecimal price,
+            int stockQuantity,
+            ProductStatus status,
+            String imageKey,
+            String imageUrl,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
         this.id = Objects.requireNonNull(id, "id must not be null");
+
+        if (version < 0) {
+            throw new IllegalArgumentException(
+                    "version must not be negative"
+            );
+        }
+
+        this.version = version;
         this.sku = normalizeSku(sku);
         this.name = requireProductName(name);
         this.description = normalizeOptionalText(description);
@@ -44,13 +56,16 @@ public class Product {
         this.updatedAt = updatedAt;
     }
 
-    public static Product create(String sku,
-                                 String name,
-                                 String description,
-                                 BigDecimal price,
-                                 int stockQuantity) {
+    public static Product create(
+            String sku,
+            String name,
+            String description,
+            BigDecimal price,
+            int stockQuantity
+    ) {
         return new Product(
                 UUID.randomUUID(),
+                0L,
                 sku,
                 name,
                 description,
@@ -62,6 +77,10 @@ public class Product {
                 null,
                 null
         );
+    }
+
+    public long getVersion() {
+        return version;
     }
 
     public UUID getId() {

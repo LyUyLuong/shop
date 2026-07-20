@@ -38,7 +38,8 @@ public interface ProductJpaRepository extends JpaRepository<ProductJpaEntity, UU
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update ProductJpaEntity p
-            set p.stockQuantity = p.stockQuantity - :quantity
+            set p.stockQuantity = p.stockQuantity - :quantity,
+                p.version = p.version + 1
             where p.id = :productId
               and p.stockQuantity >= :quantity
               and p.status = :activeStatus
@@ -51,7 +52,8 @@ public interface ProductJpaRepository extends JpaRepository<ProductJpaEntity, UU
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         update ProductJpaEntity p
-        set p.stockQuantity = p.stockQuantity + :quantity
+        set p.stockQuantity = p.stockQuantity + :quantity,
+            p.version = p.version + 1
         where p.id = :productId
         """)
     int increaseStock(

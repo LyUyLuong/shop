@@ -7,6 +7,7 @@ import java.util.UUID;
 public record CartResult(
         UUID id,
         UUID userId,
+        long version,
         List<CartItemResult> items,
         Instant createdAt,
         Instant updatedAt

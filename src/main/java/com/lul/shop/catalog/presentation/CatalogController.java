@@ -87,7 +87,8 @@ public class CatalogController {
                 request.name(),
                 request.description(),
                 request.price(),
-                request.stockQuantity()
+                request.stockQuantity(),
+                request.expectedVersion()
         );
 
         ProductResult result = catalogService.updateProduct(productId, command);

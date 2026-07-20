@@ -124,6 +124,7 @@ public class CatalogService {
     private ProductResult toResult(Product product) {
         return new ProductResult(
                 product.getId(),
+                product.getVersion(),
                 product.getSku(),
                 product.getName(),
                 product.getDescription(),
