@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -157,8 +158,17 @@ class OrderIdempotencyRepositoryImplTest
 
     @Test
     void shouldFlushPendingOrderBeforeCompletingClaim() {
+        Instant operationStartedAt = Instant.now()
+                .truncatedTo(ChronoUnit.MICROS);
+
+        Instant operationCompletedAt =
+                operationStartedAt.plusSeconds(1);
+
         OrderIdempotencyRecord claim =
-                processingClaim(USER_ID);
+                processingClaim(
+                        USER_ID,
+                        operationStartedAt
+                );
 
         UUID orderId = transactions.execute(status -> {
             assertThat(
@@ -175,7 +185,7 @@ class OrderIdempotencyRepositoryImplTest
                             new BigDecimal("100000.00"),
                             1
                     )),
-                    NOW
+                    operationStartedAt
             );
 
             Order saved = orderRepository.save(order);
@@ -183,7 +193,7 @@ class OrderIdempotencyRepositoryImplTest
             assertThat(repository.complete(
                     claim.id(),
                     saved.getId(),
-                    NOW.plusSeconds(1)
+                    operationCompletedAt
             )).isTrue();
 
             return saved.getId();
@@ -205,13 +215,13 @@ class OrderIdempotencyRepositoryImplTest
         );
         assertThat(completed.orderId()).isEqualTo(orderId);
         assertThat(completed.updatedAt())
-                .isEqualTo(NOW.plusSeconds(1));
+                .isEqualTo(operationCompletedAt);
 
         Boolean secondCompletion = transactions.execute(
                 status -> repository.complete(
                         claim.id(),
                         orderId,
-                        NOW.plusSeconds(2)
+                        operationCompletedAt.plusSeconds(1)
                 )
         );
 
@@ -248,11 +258,21 @@ class OrderIdempotencyRepositoryImplTest
     private OrderIdempotencyRecord processingClaim(
             UUID userId
     ) {
+        return processingClaim(
+                userId,
+                NOW
+        );
+    }
+
+    private OrderIdempotencyRecord processingClaim(
+            UUID userId,
+            Instant createdAt
+    ) {
         return OrderIdempotencyRecord.processing(
                 userId,
                 KEY,
                 FINGERPRINT,
-                NOW
+                createdAt
         );
     }
 
