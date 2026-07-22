@@ -29,16 +29,9 @@ class CatalogControllerCompatibilityTest {
     private CatalogController catalogController;
 
     @Test
-    void shouldForwardOptionalExpectedVersion() {
-        verifyUpdateContract(7L);
-    }
+    void shouldForwardRequiredExpectedVersion() {
+        long expectedVersion = 7L;
 
-    @Test
-    void shouldPreserveLegacyUpdateWithoutExpectedVersion() {
-        verifyUpdateContract(null);
-    }
-
-    private void verifyUpdateContract(Long expectedVersion) {
         UpdateProductRequest request = new UpdateProductRequest(
                 "SKU-001",
                 "Running Shoes",

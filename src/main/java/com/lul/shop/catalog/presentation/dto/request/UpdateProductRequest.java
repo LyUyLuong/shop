@@ -29,7 +29,9 @@ public record UpdateProductRequest(
         @Min(value = 0, message = "Stock quantity must be >= 0")
         Integer stockQuantity,
 
+        @NotNull(message = "Expected version is required")
         @PositiveOrZero(message = "Expected version must be >= 0")
         Long expectedVersion
+
 ) {
 }

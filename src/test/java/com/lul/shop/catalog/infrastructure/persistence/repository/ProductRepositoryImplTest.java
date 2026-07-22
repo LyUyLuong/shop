@@ -1,11 +1,13 @@
 package com.lul.shop.catalog.infrastructure.persistence.repository;
 
+import com.lul.shop.catalog.application.CatalogErrorCode;
 import com.lul.shop.catalog.domain.Product;
 import com.lul.shop.catalog.domain.ProductRepository;
 import com.lul.shop.catalog.domain.ProductSearchCriteria;
 import com.lul.shop.catalog.domain.ProductStatus;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
+import com.lul.shop.shared.exception.BusinessException;
 import com.lul.shop.shared.test.PostgresIntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -380,7 +382,40 @@ class ProductRepositoryImplTest extends PostgresIntegrationTest {
 
         assertThatThrownBy(
                 () -> productRepository.save(staleSnapshot)
-        ).isInstanceOf(OptimisticLockingFailureException.class);
+        ).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(
+                                CatalogErrorCode.PRODUCT_VERSION_CONFLICT
+                        )
+        );
+    }
+
+    @Test
+    void shouldTranslateConcurrentSkuConstraint() {
+        saveProduct(
+                "TC-SKU-CONFLICT",
+                "Original Product",
+                "Original product",
+                "150000.00",
+                5
+        );
+
+        flushAndClear();
+
+        assertThatThrownBy(() -> saveProduct(
+                "tc-sku-conflict",
+                "Concurrent Product",
+                "Concurrent product",
+                "170000.00",
+                7
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(
+                                CatalogErrorCode.PRODUCT_SKU_ALREADY_EXISTS
+                        )
+        );
     }
 
     private Product saveProduct(String sku,

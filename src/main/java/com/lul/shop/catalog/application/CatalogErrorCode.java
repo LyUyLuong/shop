@@ -10,7 +10,8 @@ public enum CatalogErrorCode implements ErrorCode {
     INVALID_PRODUCT_IMAGE("CATALOG_004", "Invalid product image", 400),
     PRODUCT_IMAGE_UPLOAD_FAILED("CATALOG_005", "Product image upload failed", 502),
     PRODUCT_IMAGE_NOT_FOUND("CATALOG_006", "Product image was not found", 404),
-    PRODUCT_IMAGE_READ_FAILED("CATALOG_007", "Product image could not be loaded", 502);
+    PRODUCT_IMAGE_READ_FAILED("CATALOG_007", "Product image could not be loaded", 502),
+    PRODUCT_VERSION_CONFLICT("CATALOG_008", "Product was modified by another operation", 409);
 
     private final String code;
     private final String message;
