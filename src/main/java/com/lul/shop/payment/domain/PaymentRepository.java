@@ -13,5 +13,4 @@ public interface PaymentRepository {
 
     Optional<Payment> findByOrderId(UUID orderId);
 
-    boolean existsByOrderId(UUID orderId);
 }

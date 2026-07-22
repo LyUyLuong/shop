@@ -1,6 +1,7 @@
 package com.lul.shop.ordering.application;
 
 import com.lul.shop.ordering.application.dto.ChangeOrderStatusCommand;
+import com.lul.shop.ordering.application.dto.OrderPaymentTransitionResult;
 import com.lul.shop.ordering.application.port.OrderInventoryClient;
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderItem;
@@ -126,8 +127,8 @@ public class OrderLifecycleService {
         return savedOrder;
     }
 
-    @Transactional
-    public Order markPaidByPayment(
+    @Transactional(propagation = Propagation.MANDATORY)
+    public OrderPaymentTransitionResult markPaidByPayment(
             UUID userId,
             UUID orderId
     ) {
@@ -150,6 +151,23 @@ public class OrderLifecycleService {
                                 OrderingErrorCode.ORDER_NOT_FOUND
                         )
                 );
+
+        if (order.getStatus() == OrderStatus.PAID) {
+            log.info(
+                    "action=order.payment_transition "
+                            + "orderId={} userId={} status={} "
+                            + "outcome={} result=success",
+                    order.getId(),
+                    userId,
+                    order.getStatus(),
+                    OrderPaymentTransitionResult.Outcome.ALREADY_PAID
+            );
+
+            return toPaymentTransitionResult(
+                    order,
+                    OrderPaymentTransitionResult.Outcome.ALREADY_PAID
+            );
+        }
 
         Instant paidAt = Instant.now(clock);
 
@@ -177,14 +195,19 @@ public class OrderLifecycleService {
         log.info(
                 "action=order.status_changed "
                         + "orderId={} actorType=PAYMENT userId={} "
-                        + "fromStatus={} toStatus={} result=success",
+                        + "fromStatus={} toStatus={} outcome={} "
+                        + "result=success",
                 savedOrder.getId(),
                 userId,
                 fromStatus,
-                savedOrder.getStatus()
+                savedOrder.getStatus(),
+                OrderPaymentTransitionResult.Outcome.NEWLY_PAID
         );
 
-        return savedOrder;
+        return toPaymentTransitionResult(
+                savedOrder,
+                OrderPaymentTransitionResult.Outcome.NEWLY_PAID
+        );
     }
 
     @Transactional
@@ -258,6 +281,18 @@ public class OrderLifecycleService {
         );
 
         return savedOrder;
+    }
+
+    private OrderPaymentTransitionResult toPaymentTransitionResult(
+            Order order,
+            OrderPaymentTransitionResult.Outcome outcome
+    ) {
+        return new OrderPaymentTransitionResult(
+                order.getId(),
+                order.getUserId(),
+                order.getTotalAmount(),
+                outcome
+        );
     }
 
     private void requireValidTransition(

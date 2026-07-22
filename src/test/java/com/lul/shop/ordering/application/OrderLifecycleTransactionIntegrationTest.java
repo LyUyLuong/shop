@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.IllegalTransactionStateException;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -62,6 +63,13 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
             jdbcTemplate.update(
                     "delete from outbox_events where aggregate_id = ?",
                     fixture.orderId()
+            );
+            jdbcTemplate.update(
+                    """
+                    delete from payment_idempotency_records
+                    where user_id = ?
+                    """,
+                    fixture.ownerId()
             );
             jdbcTemplate.update(
                     "delete from payments where order_id = ?",
@@ -148,7 +156,8 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
         PaymentResult result = paymentService.payMock(
                 new PayOrderCommand(
                         fixture.ownerId(),
-                        fixture.orderId()
+                        fixture.orderId(),
+                        paymentIdempotencyKey(fixture)
                 )
         );
 
@@ -181,7 +190,8 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
         assertThatThrownBy(() -> paymentService.payMock(
                 new PayOrderCommand(
                         fixture.ownerId(),
-                        fixture.orderId()
+                        fixture.orderId(),
+                        paymentIdempotencyKey(fixture)
                 )
         ))
                 .isInstanceOf(IllegalStateException.class)
@@ -231,6 +241,16 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
 
         assertUnchangedPendingOrder(fixture);
         assertThat(historyCount(fixture.orderId())).isZero();
+    }
+
+    @Test
+    void shouldRequireOuterTransactionForPaymentTransition() {
+        assertThatThrownBy(() ->
+                lifecycleService.markPaidByPayment(
+                        UUID.randomUUID(),
+                        UUID.randomUUID()
+                )
+        ).isInstanceOf(IllegalTransactionStateException.class);
     }
 
     private Fixture seedPendingOrder(boolean expired) {
@@ -453,6 +473,12 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
                 String.class,
                 orderId
         );
+    }
+
+    private static String paymentIdempotencyKey(
+            Fixture fixture
+    ) {
+        return "payment-" + fixture.orderId();
     }
 
     private int paymentCount(UUID orderId) {

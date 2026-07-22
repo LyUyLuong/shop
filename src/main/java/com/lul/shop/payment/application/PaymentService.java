@@ -3,18 +3,19 @@ package com.lul.shop.payment.application;
 import com.lul.shop.outbox.application.OutboxService;
 import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.application.dto.PaymentResult;
-import com.lul.shop.payment.application.port.PayableOrderSnapshot;
 import com.lul.shop.payment.application.port.PayableOrderClient;
+import com.lul.shop.payment.application.port.PayableOrderTransitionSnapshot;
 import com.lul.shop.payment.domain.Payment;
+import com.lul.shop.payment.domain.PaymentMethod;
 import com.lul.shop.payment.domain.PaymentRepository;
+import com.lul.shop.payment.domain.PaymentStatus;
 import com.lul.shop.shared.exception.BusinessException;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -22,19 +23,25 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class PaymentService {
 
+    private static final Logger log =
+            LoggerFactory.getLogger(PaymentService.class);
+
     private final PaymentRepository paymentRepository;
     private final PayableOrderClient payableOrderClient;
+    private final PaymentIdempotencyService idempotencyService;
     private final OutboxService outboxService;
     private final Clock clock;
 
-    private static final Logger log = LoggerFactory.getLogger(PaymentService.class);
-
-    public PaymentService(PaymentRepository paymentRepository,
-                          PayableOrderClient payableOrderClient,
-                          OutboxService outboxService,
-                          Clock clock) {
+    public PaymentService(
+            PaymentRepository paymentRepository,
+            PayableOrderClient payableOrderClient,
+            PaymentIdempotencyService idempotencyService,
+            OutboxService outboxService,
+            Clock clock
+    ) {
         this.paymentRepository = paymentRepository;
         this.payableOrderClient = payableOrderClient;
+        this.idempotencyService = idempotencyService;
         this.outboxService = outboxService;
         this.clock = clock;
     }
@@ -46,38 +53,104 @@ public class PaymentService {
                 "command must not be null"
         );
 
-        PayableOrderSnapshot order =
-                payableOrderClient.getPayableOrder(
+        PaymentIdempotencyService.Decision decision =
+                idempotencyService.begin(
+                        command.userId(),
+                        command.orderId(),
+                        command.idempotencyKey()
+                );
+
+        if (decision.isReplay()) {
+            return toResult(
+                    loadReplayPayment(
+                            command,
+                            decision.replayPaymentId()
+                    )
+            );
+        }
+
+        PayableOrderTransitionSnapshot order =
+                payableOrderClient.transitionToPaid(
                         command.userId(),
                         command.orderId()
                 );
 
-        if (paymentRepository.existsByOrderId(
-                order.orderId()
-        )) {
-            throw new BusinessException(
-                    PaymentErrorCode.PAYMENT_ALREADY_EXISTS
-            );
-        }
+        requireMatchingTransition(command, order);
 
-        if (!order.payable()) {
-            throw new BusinessException(
-                    PaymentErrorCode.ORDER_NOT_PAYABLE
-            );
-        }
+        Payment payment = switch (order.outcome()) {
+            case NEWLY_PAID ->
+                    createSucceededPayment(order);
+            case ALREADY_PAID ->
+                    loadExistingPayment(order);
+        };
 
-        payableOrderClient.markOrderAsPaid(
-                command.userId(),
-                order.orderId()
+        idempotencyService.complete(
+                decision.claimId(),
+                payment.getId()
         );
 
-        Payment payment =
-                Payment.createSucceededMock(
-                        order.orderId(),
-                        order.userId(),
-                        order.totalAmount(),
-                        Instant.now(clock)
+        return toResult(payment);
+    }
+
+    public PaymentResult getPayment(
+            UUID userId,
+            UUID paymentId
+    ) {
+        Objects.requireNonNull(
+                userId,
+                "userId must not be null"
+        );
+        Objects.requireNonNull(
+                paymentId,
+                "paymentId must not be null"
+        );
+
+        Payment payment = paymentRepository
+                .findByIdAndUserId(paymentId, userId)
+                .orElseThrow(() ->
+                        new BusinessException(
+                                PaymentErrorCode.PAYMENT_NOT_FOUND
+                        )
                 );
+
+        return toResult(payment);
+    }
+
+    private Payment loadReplayPayment(
+            PayOrderCommand command,
+            UUID paymentId
+    ) {
+        Payment payment = paymentRepository
+                .findById(paymentId)
+                .orElseThrow(this::invalidIdempotencyState);
+
+        requireSucceededMockPayment(
+                payment,
+                command.userId(),
+                command.orderId()
+        );
+
+        log.info(
+                "action=payment.replayed "
+                        + "userId={} orderId={} paymentId={} "
+                        + "result=success",
+                payment.getUserId(),
+                payment.getOrderId(),
+                payment.getId()
+        );
+
+        return payment;
+    }
+
+    private Payment createSucceededPayment(
+            PayableOrderTransitionSnapshot order
+    ) {
+        Payment payment = Payment.createSucceededMock(
+                order.orderId(),
+                order.userId(),
+                order.totalAmount(),
+                clock.instant()
+        );
 
         Payment savedPayment =
                 paymentRepository.save(payment);
@@ -108,17 +181,73 @@ public class PaymentService {
                 savedPayment.getId()
         );
 
-        return toResult(savedPayment);
+        return savedPayment;
     }
 
-    public PaymentResult getPayment(UUID userId, UUID paymentId) {
-        Objects.requireNonNull(userId, "userId must not be null");
-        Objects.requireNonNull(paymentId, "paymentId must not be null");
+    private Payment loadExistingPayment(
+            PayableOrderTransitionSnapshot order
+    ) {
+        Payment payment = paymentRepository
+                .findByOrderId(order.orderId())
+                .orElseThrow(this::invalidIdempotencyState);
 
-        Payment payment = paymentRepository.findByIdAndUserId(paymentId, userId)
-                .orElseThrow(() -> new BusinessException(PaymentErrorCode.PAYMENT_NOT_FOUND));
+        requireSucceededMockPayment(
+                payment,
+                order.userId(),
+                order.orderId()
+        );
 
-        return toResult(payment);
+        if (payment.getAmount()
+                .compareTo(order.totalAmount()) != 0) {
+            throw invalidIdempotencyState();
+        }
+
+        log.info(
+                "action=payment.existing_reused "
+                        + "userId={} orderId={} paymentId={} "
+                        + "outcome=ALREADY_PAID result=success",
+                payment.getUserId(),
+                payment.getOrderId(),
+                payment.getId()
+        );
+
+        return payment;
+    }
+
+    private void requireMatchingTransition(
+            PayOrderCommand command,
+            PayableOrderTransitionSnapshot order
+    ) {
+        if (
+                !order.orderId().equals(command.orderId())
+                        || !order.userId().equals(command.userId())
+        ) {
+            throw invalidIdempotencyState();
+        }
+    }
+
+    private void requireSucceededMockPayment(
+            Payment payment,
+            UUID userId,
+            UUID orderId
+    ) {
+        if (
+                !payment.getUserId().equals(userId)
+                        || !payment.getOrderId().equals(orderId)
+                        || payment.getMethod()
+                        != PaymentMethod.MOCK
+                        || payment.getStatus()
+                        != PaymentStatus.SUCCEEDED
+        ) {
+            throw invalidIdempotencyState();
+        }
+    }
+
+    private BusinessException invalidIdempotencyState() {
+        return new BusinessException(
+                PaymentErrorCode
+                        .PAYMENT_IDEMPOTENCY_STATE_INVALID
+        );
     }
 
     private PaymentResult toResult(Payment payment) {

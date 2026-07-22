@@ -26,10 +26,7 @@ public class PaymentController {
     @PostMapping("/mock")
     public ApiResponse<PaymentResponse> payMock(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestHeader(
-                    name = "Idempotency-Key",
-                    required = false
-            )
+            @RequestHeader(name = "Idempotency-Key")
             String idempotencyKey,
             @Valid @RequestBody PayMockPaymentRequest request
     ) {

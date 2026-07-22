@@ -10,11 +10,17 @@ public record PayOrderCommand(
 ) {
 
     public PayOrderCommand {
-        Objects.requireNonNull(userId, "userId must not be null");
-        Objects.requireNonNull(orderId, "orderId must not be null");
-    }
-
-    public PayOrderCommand(UUID userId, UUID orderId) {
-        this(userId, orderId, null);
+        userId = Objects.requireNonNull(
+                userId,
+                "userId must not be null"
+        );
+        orderId = Objects.requireNonNull(
+                orderId,
+                "orderId must not be null"
+        );
+        idempotencyKey = Objects.requireNonNull(
+                idempotencyKey,
+                "idempotencyKey must not be null"
+        );
     }
 }

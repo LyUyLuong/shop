@@ -22,6 +22,8 @@ import com.lul.shop.shared.config.WebConfig;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.GlobalExceptionHandler;
+import com.lul.shop.payment.application.PaymentService;
+import com.lul.shop.payment.presentation.PaymentController;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -67,7 +69,8 @@ import static org.hamcrest.Matchers.containsString;
         AuthController.class,
         CatalogController.class,
         OrderingController.class,
-        AdminOrderController.class
+        AdminOrderController.class,
+        PaymentController.class
 })
 @Import({
         WebConfig.class,
@@ -105,6 +108,9 @@ class SecurityAccessMatrixTest {
     private static final UUID CART_ID =
             UUID.fromString("33333333-3333-4333-8333-333333333333");
 
+    private static final UUID ORDER_ID =
+            UUID.fromString("44444444-4444-4444-8444-444444444444");
+
     private static final String ORDER_IDEMPOTENCY_KEY =
             "checkout-request-001";
 
@@ -131,6 +137,9 @@ class SecurityAccessMatrixTest {
 
     @MockitoBean
     private OrderItemImageUrlResolver orderItemImageUrlResolver;
+
+    @MockitoBean
+    private PaymentService paymentService;
 
     @Test
     void shouldAllowPublicAuthRouteWithoutJwt() throws Exception {
@@ -503,6 +512,35 @@ class SecurityAccessMatrixTest {
     }
 
 
+
+    @Test
+    void shouldRejectMockPaymentWithoutIdempotencyKey()
+            throws Exception {
+
+        mockMvc.perform(post("/api/v1/payments/mock")
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(
+                                        USER_ID.toString()
+                                ))
+                                .authorities(USER_AUTHORITY))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "orderId": "%s"
+                            }
+                            """.formatted(ORDER_ID)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_005"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(
+                                "Missing required header " +
+                                        "'Idempotency-Key'"
+                        ));
+
+        verifyNoInteractions(paymentService);
+    }
 
     private static Stream<Arguments> protectedRoutes() {
         return Stream.of(
