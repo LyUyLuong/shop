@@ -12,7 +12,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 
+import static org.mockito.Mockito.times;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -218,26 +220,71 @@ class OrderPlacementIdempotencyServiceTest {
     }
 
     @Test
-    void shouldRejectInvalidKeyBeforeCallingRepository() {
-        assertThatThrownBy(() ->
-                service.begin(
-                        USER_ID,
-                        CART_ID,
-                        4L,
-                        "short"
-                )
-        )
-                .isInstanceOfSatisfying(
-                        BusinessException.class,
-                        exception -> assertThat(
-                                exception.getErrorCode()
-                        ).isEqualTo(
-                                OrderingErrorCode
-                                        .INVALID_IDEMPOTENCY_KEY
-                        )
+    void shouldAcceptExactKeyBoundariesWithoutNormalization() {
+        String minimumKey = "Ab1._:-x";
+        String maximumKey = "A".repeat(100);
+
+        when(repository.insertIfAbsent(
+                any(OrderIdempotencyRecord.class)
+        )).thenReturn(true);
+
+        service.begin(USER_ID, CART_ID, 4L, minimumKey);
+        service.begin(USER_ID, CART_ID, 4L, maximumKey);
+
+        ArgumentCaptor<OrderIdempotencyRecord> captor =
+                ArgumentCaptor.forClass(
+                        OrderIdempotencyRecord.class
                 );
 
+        verify(repository, times(2))
+                .insertIfAbsent(captor.capture());
+
+        assertThat(captor.getAllValues())
+                .extracting(
+                        OrderIdempotencyRecord::idempotencyKey
+                )
+                .containsExactly(
+                        minimumKey,
+                        maximumKey
+                );
+    }
+
+    @Test
+    void shouldRejectMissingBoundaryAndSyntaxViolations() {
+        assertInvalidKey(null);
+
+        List.of(
+                "",
+                "A".repeat(7),
+                "A".repeat(101),
+                "checkout request",
+                "checkout/request",
+                "checkout@request",
+                "\u0111at-hang-001",
+                "checkout-request-001 "
+        ).forEach(this::assertInvalidKey);
+
         verifyNoInteractions(repository);
+    }
+
+    @Test
+    void shouldIncludeCartIdAndVersionInFingerprint() {
+        UUID anotherCartId =
+                UUID.fromString(
+                        "55555555-5555-4555-8555-555555555555"
+                );
+
+        String original =
+                service.fingerprint(CART_ID, 4L);
+
+        assertThat(service.fingerprint(CART_ID, 4L))
+                .isEqualTo(original);
+
+        assertThat(service.fingerprint(anotherCartId, 4L))
+                .isNotEqualTo(original);
+
+        assertThat(service.fingerprint(CART_ID, 5L))
+                .isNotEqualTo(original);
     }
 
     @Test
@@ -268,6 +315,30 @@ class OrderPlacementIdempotencyServiceTest {
         assertInvalidState(() ->
                 service.complete(CLAIM_ID, ORDER_ID)
         );
+    }
+
+    private void assertInvalidKey(String idempotencyKey) {
+        assertThatThrownBy(() ->
+                service.begin(
+                        USER_ID,
+                        CART_ID,
+                        4L,
+                        idempotencyKey
+                )
+        )
+                .as(
+                        "idempotency key should be rejected: <%s>",
+                        idempotencyKey
+                )
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(
+                                exception.getErrorCode()
+                        ).isEqualTo(
+                                OrderingErrorCode
+                                        .INVALID_IDEMPOTENCY_KEY
+                        )
+                );
     }
 
     private OrderIdempotencyRecord completedRecord(

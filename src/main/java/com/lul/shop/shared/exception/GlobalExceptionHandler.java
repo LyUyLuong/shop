@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 
 import java.util.List;
 
@@ -87,6 +88,29 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(code.getHttpStatus())
                 .body(ApiResponse.error(ErrorInfo.of(code.getCode(), code.getMessage())));
+    }
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+    public ResponseEntity<ApiResponse<Void>>
+    handleMissingRequestHeader(
+            MissingRequestHeaderException exception
+    ) {
+        CommonErrorCode code =
+                CommonErrorCode.INVALID_REQUEST;
+
+        String message =
+                "Missing required header '"
+                        + exception.getHeaderName()
+                        + "'";
+
+        return ResponseEntity
+                .status(code.getHttpStatus())
+                .body(ApiResponse.error(
+                        ErrorInfo.of(
+                                code.getCode(),
+                                message
+                        )
+                ));
     }
 
     @ExceptionHandler(Exception.class)

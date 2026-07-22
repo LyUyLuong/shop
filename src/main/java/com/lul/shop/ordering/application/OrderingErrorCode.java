@@ -17,7 +17,8 @@ public enum OrderingErrorCode implements ErrorCode {
     ORDER_NOT_EXPIRABLE("ORDERING_011", "Order is not eligible for expiry", 409),
     INVALID_IDEMPOTENCY_KEY("ORDERING_012", "Idempotency key is invalid", 400),
     IDEMPOTENCY_KEY_REUSED("ORDERING_013", "Idempotency key was reused for a different order request", 409),
-    ORDER_IDEMPOTENCY_STATE_INVALID("ORDERING_014", "Order idempotency state is invalid", 500);
+    ORDER_IDEMPOTENCY_STATE_INVALID("ORDERING_014", "Order idempotency state is invalid", 500),
+    CART_CHECKOUT_CONFLICT("ORDERING_015", "Cart changed before checkout", 409);
 
     private final String code;
     private final String message;

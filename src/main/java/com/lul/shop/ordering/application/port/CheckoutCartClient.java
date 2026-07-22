@@ -4,7 +4,9 @@ import java.util.UUID;
 
 public interface CheckoutCartClient {
 
-    CheckoutCartSnapshot getCartForCheckout(UUID userId);
-
-    void clearCart(UUID userId);
+    CheckoutCartSnapshot claimForCheckout(
+            UUID userId,
+            UUID cartId,
+            long expectedVersion
+    );
 }

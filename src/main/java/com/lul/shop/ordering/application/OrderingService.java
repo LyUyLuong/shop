@@ -23,6 +23,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.Comparator;
 
 @Service
 @Transactional(readOnly = true)
@@ -33,30 +34,64 @@ public class OrderingService {
     private final OrderRepository orderRepository;
     private final CheckoutCartClient checkoutCartClient;
     private final CheckoutProductClient checkoutProductClient;
+    private final OrderPlacementIdempotencyService idempotencyService;
+
     private final Clock clock;
 
-    public OrderingService(OrderRepository orderRepository,
-                           CheckoutCartClient checkoutCartClient,
-                           CheckoutProductClient checkoutProductClient,
-                           Clock clock) {
+    public OrderingService(
+            OrderRepository orderRepository,
+            CheckoutCartClient checkoutCartClient,
+            CheckoutProductClient checkoutProductClient,
+            OrderPlacementIdempotencyService idempotencyService,
+            Clock clock
+    ) {
         this.orderRepository = orderRepository;
         this.checkoutCartClient = checkoutCartClient;
         this.checkoutProductClient = checkoutProductClient;
+        this.idempotencyService = idempotencyService;
         this.clock = clock;
     }
 
     @Transactional
     public OrderResult placeOrder(PlaceOrderCommand command) {
-        Objects.requireNonNull(command, "command must not be null");
+        Objects.requireNonNull(
+                command,
+                "command must not be null"
+        );
 
-        CheckoutCartSnapshot cart = checkoutCartClient.getCartForCheckout(command.userId());
+        OrderPlacementIdempotencyService.Decision decision =
+                idempotencyService.begin(
+                        command.userId(),
+                        command.cartId(),
+                        command.cartVersion(),
+                        command.idempotencyKey()
+                );
+
+        if (decision.isReplay()) {
+            return replayOrder(
+                    command.userId(),
+                    decision.replayOrderId()
+            );
+        }
+
+        CheckoutCartSnapshot cart =
+                checkoutCartClient.claimForCheckout(
+                        command.userId(),
+                        command.cartId(),
+                        command.cartVersion()
+                );
 
         if (cart.isEmpty()) {
-            throw new BusinessException(OrderingErrorCode.CART_EMPTY);
+            throw new BusinessException(
+                    OrderingErrorCode.CART_EMPTY
+            );
         }
 
         List<OrderItem> orderItems = cart.items()
                 .stream()
+                .sorted(Comparator.comparing(
+                        CheckoutCartItemSnapshot::productId
+                ))
                 .map(this::createOrderItem)
                 .toList();
 
@@ -68,10 +103,14 @@ public class OrderingService {
 
         Order savedOrder = orderRepository.save(order);
 
-        checkoutCartClient.clearCart(command.userId());
+        idempotencyService.complete(
+                decision.claimId(),
+                savedOrder.getId()
+        );
 
         log.info(
-                "action=order.placed userId={} orderId={} itemCount={} totalAmount={}",
+                "action=order.placed userId={} orderId={} "
+                        + "itemCount={} totalAmount={}",
                 savedOrder.getUserId(),
                 savedOrder.getId(),
                 savedOrder.getItems().size(),
@@ -79,6 +118,26 @@ public class OrderingService {
         );
 
         return toResult(savedOrder);
+    }
+
+    private OrderResult replayOrder(
+            UUID userId,
+            UUID orderId
+    ) {
+        Order order = orderRepository
+                .findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> new BusinessException(
+                        OrderingErrorCode
+                                .ORDER_IDEMPOTENCY_STATE_INVALID
+                ));
+
+        log.info(
+                "action=order.replayed userId={} orderId={}",
+                userId,
+                orderId
+        );
+
+        return toResult(order);
     }
 
     public List<OrderResult> getOrders(UUID userId) {
