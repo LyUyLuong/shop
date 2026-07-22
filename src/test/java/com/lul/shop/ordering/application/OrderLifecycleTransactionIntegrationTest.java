@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.dao.DataAccessException;
+import org.springframework.transaction.IllegalTransactionStateException;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -231,6 +232,16 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
 
         assertUnchangedPendingOrder(fixture);
         assertThat(historyCount(fixture.orderId())).isZero();
+    }
+
+    @Test
+    void shouldRequireOuterTransactionForPaymentTransition() {
+        assertThatThrownBy(() ->
+                lifecycleService.markPaidByPayment(
+                        UUID.randomUUID(),
+                        UUID.randomUUID()
+                )
+        ).isInstanceOf(IllegalTransactionStateException.class);
     }
 
     private Fixture seedPendingOrder(boolean expired) {

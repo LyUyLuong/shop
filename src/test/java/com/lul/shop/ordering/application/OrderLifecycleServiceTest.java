@@ -1,6 +1,7 @@
 package com.lul.shop.ordering.application;
 
 import com.lul.shop.ordering.application.dto.ChangeOrderStatusCommand;
+import com.lul.shop.ordering.application.dto.OrderPaymentTransitionResult;
 import com.lul.shop.ordering.application.port.OrderInventoryClient;
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderItem;
@@ -346,8 +347,7 @@ class OrderLifecycleServiceTest {
 
     @Test
     void shouldLockOwnedOrderMarkPaidAndRecordPaymentHistory() {
-        OrderRepository orderRepository =
-                mock(OrderRepository.class);
+        OrderRepository orderRepository = mock(OrderRepository.class);
         OrderStatusHistoryRepository historyRepository =
                 mock(OrderStatusHistoryRepository.class);
         OrderInventoryClient inventoryClient =
@@ -355,68 +355,107 @@ class OrderLifecycleServiceTest {
 
         Order order = pendingOrderWithDuplicateProducts();
 
-        when(
-                orderRepository.findByIdAndUserIdForUpdate(
-                        order.getId(),
-                        USER_ID
-                )
-        ).thenReturn(Optional.of(order));
+        when(orderRepository.findByIdAndUserIdForUpdate(
+                order.getId(),
+                USER_ID
+        )).thenReturn(Optional.of(order));
 
         when(orderRepository.save(any(Order.class)))
-                .thenAnswer(invocation ->
-                        invocation.getArgument(0)
-                );
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
-        OrderLifecycleService service =
-                new OrderLifecycleService(
-                        orderRepository,
-                        historyRepository,
-                        inventoryClient,
-                        CLOCK
-                );
-
-        Order result = service.markPaidByPayment(
-                USER_ID,
-                order.getId()
+        OrderLifecycleService service = new OrderLifecycleService(
+                orderRepository,
+                historyRepository,
+                inventoryClient,
+                CLOCK
         );
 
-        assertThat(result.getStatus())
-                .isEqualTo(OrderStatus.PAID);
-        assertThat(result.getInventoryReleasedAt()).isNull();
+        OrderPaymentTransitionResult result =
+                service.markPaidByPayment(USER_ID, order.getId());
 
-        verify(orderRepository)
-                .findByIdAndUserIdForUpdate(
-                        order.getId(),
-                        USER_ID
-                );
+        assertThat(result.orderId()).isEqualTo(order.getId());
+        assertThat(result.userId()).isEqualTo(USER_ID);
+        assertThat(result.totalAmount())
+                .isEqualByComparingTo(order.getTotalAmount());
+        assertThat(result.outcome()).isEqualTo(
+                OrderPaymentTransitionResult.Outcome.NEWLY_PAID
+        );
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(order.getInventoryReleasedAt()).isNull();
+
+        verify(orderRepository).findByIdAndUserIdForUpdate(
+                order.getId(),
+                USER_ID
+        );
         verify(orderRepository).save(order);
         verifyNoInteractions(inventoryClient);
 
         ArgumentCaptor<OrderStatusHistory> historyCaptor =
-                ArgumentCaptor.forClass(
-                        OrderStatusHistory.class
-                );
+                ArgumentCaptor.forClass(OrderStatusHistory.class);
 
-        verify(historyRepository)
-                .save(historyCaptor.capture());
+        verify(historyRepository).save(historyCaptor.capture());
 
-        OrderStatusHistory history =
-                historyCaptor.getValue();
+        OrderStatusHistory history = historyCaptor.getValue();
 
-        assertThat(history.getOrderId())
-                .isEqualTo(order.getId());
+        assertThat(history.getOrderId()).isEqualTo(order.getId());
         assertThat(history.getFromStatus())
                 .isEqualTo(OrderStatus.PENDING_PAYMENT);
-        assertThat(history.getToStatus())
-                .isEqualTo(OrderStatus.PAID);
+        assertThat(history.getToStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(history.getActorType())
-                .isEqualTo(
-                        OrderStatusChangeActorType.PAYMENT
-                );
+                .isEqualTo(OrderStatusChangeActorType.PAYMENT);
         assertThat(history.getActorUserId()).isNull();
-        assertThat(history.getReason())
-                .isEqualTo("Payment succeeded");
+        assertThat(history.getReason()).isEqualTo("Payment succeeded");
     }
+
+
+    @Test
+    void shouldReturnAlreadyPaidWithoutDuplicateWrites() {
+        OrderRepository orderRepository = mock(OrderRepository.class);
+        OrderStatusHistoryRepository historyRepository =
+                mock(OrderStatusHistoryRepository.class);
+        OrderInventoryClient inventoryClient =
+                mock(OrderInventoryClient.class);
+
+        Order order = paidOrder();
+
+        when(orderRepository.findByIdAndUserIdForUpdate(
+                order.getId(),
+                USER_ID
+        )).thenReturn(Optional.of(order));
+
+        Clock afterDeadlineClock = Clock.fixed(
+                order.getExpiresAt().plusSeconds(1),
+                ZoneOffset.UTC
+        );
+
+        OrderLifecycleService service = new OrderLifecycleService(
+                orderRepository,
+                historyRepository,
+                inventoryClient,
+                afterDeadlineClock
+        );
+
+        OrderPaymentTransitionResult result =
+                service.markPaidByPayment(USER_ID, order.getId());
+
+        assertThat(result.orderId()).isEqualTo(order.getId());
+        assertThat(result.userId()).isEqualTo(USER_ID);
+        assertThat(result.totalAmount())
+                .isEqualByComparingTo(order.getTotalAmount());
+        assertThat(result.outcome()).isEqualTo(
+                OrderPaymentTransitionResult.Outcome.ALREADY_PAID
+        );
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PAID);
+
+        verify(orderRepository).findByIdAndUserIdForUpdate(
+                order.getId(),
+                USER_ID
+        );
+        verify(orderRepository, never()).save(any(Order.class));
+        verifyNoInteractions(historyRepository);
+        verifyNoInteractions(inventoryClient);
+    }
+
 
     @Test
     void shouldRejectPaymentAtExactDeadline() {
