@@ -7,5 +7,10 @@ public interface CartRepository {
 
     Optional<Cart> findByUserId(UUID userId);
 
+    Optional<Cart> findByIdAndUserIdForUpdate(
+            UUID cartId,
+            UUID userId
+    );
+
     Cart save(Cart cart);
 }

@@ -11,6 +11,7 @@ import com.lul.shop.cart.domain.CartItem;
 import com.lul.shop.cart.domain.CartRepository;
 import com.lul.shop.shared.exception.BusinessException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
@@ -108,6 +109,56 @@ public class CartService {
         cart.clear();
 
         cartRepository.save(cart);
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public CartResult claimForCheckout(
+            UUID userId,
+            UUID cartId,
+            long expectedVersion
+    ) {
+        Objects.requireNonNull(
+                userId,
+                "userId must not be null"
+        );
+        Objects.requireNonNull(
+                cartId,
+                "cartId must not be null"
+        );
+
+        if (expectedVersion < 0) {
+            throw new IllegalArgumentException(
+                    "expectedVersion must not be negative"
+            );
+        }
+
+        Cart cart = cartRepository
+                .findByIdAndUserIdForUpdate(
+                        cartId,
+                        userId
+                )
+                .orElseThrow(this::newCheckoutConflict);
+
+        if (cart.getVersion() != expectedVersion) {
+            throw newCheckoutConflict();
+        }
+
+        CartResult snapshot = toResult(cart);
+
+        if (cart.isEmpty()) {
+            return snapshot;
+        }
+
+        cart.clear();
+        cartRepository.save(cart);
+
+        return snapshot;
+    }
+
+    private BusinessException newCheckoutConflict() {
+        return new BusinessException(
+                CartErrorCode.CART_CHECKOUT_CONFLICT
+        );
     }
 
     private Cart getExistingCartOrThrow(UUID userId) {

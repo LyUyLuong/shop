@@ -247,6 +247,23 @@ public class CartServiceTest {
         }
 
         @Override
+        public Optional<Cart> findByIdAndUserIdForUpdate(
+                UUID cartId,
+                UUID userId
+        ) {
+            Cart cart = cartsByUserId.get(userId);
+
+            if (
+                    cart == null
+                            || !cart.getId().equals(cartId)
+            ) {
+                return Optional.empty();
+            }
+
+            return Optional.of(cart);
+        }
+
+        @Override
         public Cart save(Cart cart) {
             cartsByUserId.put(cart.getUserId(),cart);
             savedCarts.add(cart);
