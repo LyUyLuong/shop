@@ -60,10 +60,4 @@ public class PaymentRepositoryImpl implements PaymentRepository {
                 .map(paymentMapper::toDomain);
     }
 
-    @Override
-    public boolean existsByOrderId(UUID orderId) {
-        Objects.requireNonNull(orderId, "orderId must not be null");
-
-        return paymentJpaRepository.existsByOrderId(orderId);
-    }
 }

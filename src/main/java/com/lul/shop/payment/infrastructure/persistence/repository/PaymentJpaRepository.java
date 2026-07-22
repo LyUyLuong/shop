@@ -26,10 +26,4 @@ public interface PaymentJpaRepository extends JpaRepository<PaymentJpaEntity, UU
             """)
     Optional<PaymentJpaEntity> findByOrderId(@Param("orderId") UUID orderId);
 
-    @Query("""
-            select count(p) > 0
-            from PaymentJpaEntity p
-            where p.orderId = :orderId
-            """)
-    boolean existsByOrderId(@Param("orderId") UUID orderId);
 }

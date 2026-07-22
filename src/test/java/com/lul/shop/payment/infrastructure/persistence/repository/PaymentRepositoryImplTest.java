@@ -90,7 +90,7 @@ class PaymentRepositoryImplTest extends PostgresIntegrationTest {
     }
 
     @Test
-    void shouldFindAndCheckPaymentByOrderId() {
+    void shouldFindPaymentByOrderId() {
         insertUser(USER_ID, "payment-order@example.com");
         insertProduct(PRODUCT_ID);
         insertOrder(ORDER_ID, USER_ID, "100000.00");
@@ -104,9 +104,6 @@ class PaymentRepositoryImplTest extends PostgresIntegrationTest {
         ));
 
         flushAndClear();
-
-        assertThat(paymentRepository.existsByOrderId(ORDER_ID)).isTrue();
-        assertThat(paymentRepository.existsByOrderId(OTHER_ORDER_ID)).isFalse();
 
         Payment found = paymentRepository.findByOrderId(ORDER_ID).orElseThrow();
 

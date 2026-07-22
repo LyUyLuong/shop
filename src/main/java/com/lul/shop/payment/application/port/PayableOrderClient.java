@@ -4,7 +4,8 @@ import java.util.UUID;
 
 public interface PayableOrderClient {
 
-    PayableOrderSnapshot getPayableOrder(UUID userId, UUID orderId);
-
-    void markOrderAsPaid(UUID userId, UUID orderId);
+    PayableOrderTransitionSnapshot transitionToPaid(
+            UUID userId,
+            UUID orderId
+    );
 }

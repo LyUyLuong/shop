@@ -2,12 +2,10 @@ package com.lul.shop.payment.infrastructure.ordering;
 
 import com.lul.shop.ordering.application.OrderLifecycleService;
 import com.lul.shop.ordering.application.OrderingErrorCode;
-import com.lul.shop.ordering.application.OrderingService;
-import com.lul.shop.ordering.application.dto.OrderResult;
-import com.lul.shop.ordering.domain.OrderStatus;
+import com.lul.shop.ordering.application.dto.OrderPaymentTransitionResult;
 import com.lul.shop.payment.application.PaymentErrorCode;
 import com.lul.shop.payment.application.port.PayableOrderClient;
-import com.lul.shop.payment.application.port.PayableOrderSnapshot;
+import com.lul.shop.payment.application.port.PayableOrderTransitionSnapshot;
 import com.lul.shop.shared.exception.BusinessException;
 import org.springframework.stereotype.Component;
 
@@ -17,54 +15,48 @@ import java.util.UUID;
 public class OrderingPayableOrderAdapter
         implements PayableOrderClient {
 
-    private final OrderingService orderingService;
     private final OrderLifecycleService lifecycleService;
 
     public OrderingPayableOrderAdapter(
-            OrderingService orderingService,
             OrderLifecycleService lifecycleService
     ) {
-        this.orderingService = orderingService;
         this.lifecycleService = lifecycleService;
     }
 
     @Override
-    public PayableOrderSnapshot getPayableOrder(
+    public PayableOrderTransitionSnapshot transitionToPaid(
             UUID userId,
             UUID orderId
     ) {
         try {
-            OrderResult order =
-                    orderingService.getOrder(
+            OrderPaymentTransitionResult result =
+                    lifecycleService.markPaidByPayment(
                             userId,
                             orderId
                     );
 
-            return new PayableOrderSnapshot(
-                    order.id(),
-                    order.userId(),
-                    order.totalAmount(),
-                    order.status()
-                            == OrderStatus.PENDING_PAYMENT
+            return new PayableOrderTransitionSnapshot(
+                    result.orderId(),
+                    result.userId(),
+                    result.totalAmount(),
+                    mapOutcome(result.outcome())
             );
         } catch (BusinessException exception) {
             throw translateOrderingException(exception);
         }
     }
 
-    @Override
-    public void markOrderAsPaid(
-            UUID userId,
-            UUID orderId
+    private PayableOrderTransitionSnapshot.Outcome mapOutcome(
+            OrderPaymentTransitionResult.Outcome outcome
     ) {
-        try {
-            lifecycleService.markPaidByPayment(
-                    userId,
-                    orderId
-            );
-        } catch (BusinessException exception) {
-            throw translateOrderingException(exception);
-        }
+        return switch (outcome) {
+            case NEWLY_PAID ->
+                    PayableOrderTransitionSnapshot
+                            .Outcome.NEWLY_PAID;
+            case ALREADY_PAID ->
+                    PayableOrderTransitionSnapshot
+                            .Outcome.ALREADY_PAID;
+        };
     }
 
     private BusinessException translateOrderingException(

@@ -65,6 +65,13 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
                     fixture.orderId()
             );
             jdbcTemplate.update(
+                    """
+                    delete from payment_idempotency_records
+                    where user_id = ?
+                    """,
+                    fixture.ownerId()
+            );
+            jdbcTemplate.update(
                     "delete from payments where order_id = ?",
                     fixture.orderId()
             );
@@ -149,7 +156,8 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
         PaymentResult result = paymentService.payMock(
                 new PayOrderCommand(
                         fixture.ownerId(),
-                        fixture.orderId()
+                        fixture.orderId(),
+                        paymentIdempotencyKey(fixture)
                 )
         );
 
@@ -182,7 +190,8 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
         assertThatThrownBy(() -> paymentService.payMock(
                 new PayOrderCommand(
                         fixture.ownerId(),
-                        fixture.orderId()
+                        fixture.orderId(),
+                        paymentIdempotencyKey(fixture)
                 )
         ))
                 .isInstanceOf(IllegalStateException.class)
@@ -464,6 +473,12 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
                 String.class,
                 orderId
         );
+    }
+
+    private static String paymentIdempotencyKey(
+            Fixture fixture
+    ) {
+        return "payment-" + fixture.orderId();
     }
 
     private int paymentCount(UUID orderId) {
