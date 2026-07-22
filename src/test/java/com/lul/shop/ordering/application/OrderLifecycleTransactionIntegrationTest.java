@@ -11,12 +11,18 @@ import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.application.dto.PaymentResult;
 import com.lul.shop.payment.domain.PaymentStatus;
 import com.lul.shop.shared.test.PostgresIntegrationTest;
+import com.lul.shop.payment.application.PaymentErrorCode;
+import com.lul.shop.payment.domain.PaymentIdempotencyRepository;
+import com.lul.shop.shared.exception.BusinessException;
+import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.dao.DataAccessException;
+import org.springframework.test.util.AopTestUtils;
 import org.springframework.transaction.IllegalTransactionStateException;
 
 import java.math.BigDecimal;
@@ -32,6 +38,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 
 class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
 
@@ -55,7 +62,24 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
     @MockitoSpyBean
     private OutboxService outboxService;
 
+    @Autowired
+    private EntityManager entityManager;
+
+    @MockitoSpyBean
+    private PaymentIdempotencyRepository paymentIdempotencyRepository;
+
+    private PaymentIdempotencyRepository
+            paymentIdempotencyRepositorySpy;
+
     private final List<Fixture> fixtures = new ArrayList<>();
+
+    @BeforeEach
+    void unwrapRepositorySpy() {
+        paymentIdempotencyRepositorySpy =
+                AopTestUtils.getUltimateTargetObject(
+                        paymentIdempotencyRepository
+                );
+    }
 
     @AfterEach
     void cleanDatabase() {
@@ -123,6 +147,7 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
         assertThat(historyCount(fixture.orderId())).isEqualTo(1);
         assertThat(historyActor(fixture.orderId()))
                 .isEqualTo(OrderStatusChangeActorType.ADMIN.name());
+
     }
 
     @Test
@@ -173,6 +198,12 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
         assertThat(historyActor(fixture.orderId()))
                 .isEqualTo(OrderStatusChangeActorType.PAYMENT.name());
         assertThat(outboxCount(fixture.orderId())).isEqualTo(1);
+
+        assertThat(loadPaymentIdempotency(fixture))
+                .isEqualTo(new PaymentIdempotencyState(
+                        "COMPLETED",
+                        result.id()
+                ));
     }
 
     @Test
@@ -201,6 +232,7 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
         assertThat(paymentCount(fixture.orderId())).isZero();
         assertThat(historyCount(fixture.orderId())).isZero();
         assertThat(outboxCount(fixture.orderId())).isZero();
+        assertThat(paymentIdempotencyCount(fixture)).isZero();
     }
 
     @Test
@@ -251,6 +283,78 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
                         UUID.randomUUID()
                 )
         ).isInstanceOf(IllegalTransactionStateException.class);
+    }
+
+    @Test
+    void shouldRollbackPaymentWorkWhenIdempotencyCompletionFails() {
+        Fixture fixture = seedPendingOrder(false);
+
+        doAnswer(invocation -> {
+            entityManager.flush();
+            return false;
+        }).when(paymentIdempotencyRepositorySpy).complete(
+                any(UUID.class),
+                any(UUID.class),
+                any(Instant.class)
+        );
+
+        assertThatThrownBy(() -> paymentService.payMock(
+                new PayOrderCommand(
+                        fixture.ownerId(),
+                        fixture.orderId(),
+                        paymentIdempotencyKey(fixture)
+                )
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(
+                                PaymentErrorCode
+                                        .PAYMENT_IDEMPOTENCY_STATE_INVALID
+                        )
+        );
+
+        assertUnchangedPendingOrder(fixture);
+        assertThat(paymentCount(fixture.orderId())).isZero();
+        assertThat(historyCount(fixture.orderId())).isZero();
+        assertThat(outboxCount(fixture.orderId())).isZero();
+        assertThat(paymentIdempotencyCount(fixture)).isZero();
+    }
+
+    private PaymentIdempotencyState loadPaymentIdempotency(
+            Fixture fixture
+    ) {
+        return jdbcTemplate.queryForObject(
+                """
+                select status, payment_id
+                from payment_idempotency_records
+                where user_id = ?
+                  and idempotency_key = ?
+                """,
+                (resultSet, rowNumber) ->
+                        new PaymentIdempotencyState(
+                                resultSet.getString("status"),
+                                resultSet.getObject(
+                                        "payment_id",
+                                        UUID.class
+                                )
+                        ),
+                fixture.ownerId(),
+                paymentIdempotencyKey(fixture)
+        );
+    }
+
+    private int paymentIdempotencyCount(Fixture fixture) {
+        return jdbcTemplate.queryForObject(
+                """
+                select count(*)
+                from payment_idempotency_records
+                where user_id = ?
+                  and idempotency_key = ?
+                """,
+                Integer.class,
+                fixture.ownerId(),
+                paymentIdempotencyKey(fixture)
+        );
     }
 
     private Fixture seedPendingOrder(boolean expired) {
@@ -516,6 +620,11 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
     private record OrderState(
             String status,
             Instant inventoryReleasedAt
+    ) {
+    }
+    private record PaymentIdempotencyState(
+            String status,
+            UUID paymentId
     ) {
     }
 }
