@@ -518,70 +518,118 @@ class OrderLifecycleRaceIntegrationTest
 
     private void assertPaidOutcome(Fixture fixture) {
         PersistedOrder order = loadOrder(fixture.orderId());
+        UUID paymentId = loadPaymentId(fixture.orderId());
 
-        assertThat(order.status()).isEqualTo(OrderStatus.PAID.name());
-        assertThat(order.inventoryReleasedAt()).isNull();
+        assertThat(order.status())
+                .isEqualTo(OrderStatus.PAID.name());
+
+        assertThat(order.inventoryReleasedAt())
+                .isNull();
+
         assertThat(loadStock(fixture.productId()))
                 .isEqualTo(INITIAL_STOCK);
-        assertThat(paymentCount(fixture.orderId())).isEqualTo(1);
-        assertThat(outboxCount(fixture.orderId())).isEqualTo(1);
+
+        assertThat(paymentCount(fixture.orderId()))
+                .isEqualTo(1);
+
+        assertThat(outboxCount(fixture.orderId()))
+                .isEqualTo(1);
+
         assertThat(historyCount(
                 fixture.orderId(),
                 OrderStatusChangeActorType.PAYMENT,
                 OrderStatus.PAID
         )).isEqualTo(1);
+
         assertThat(historyCount(
                 fixture.orderId(),
                 OrderStatusChangeActorType.SYSTEM,
                 OrderStatus.EXPIRED
         )).isZero();
+
         assertThat(historyCount(
                 fixture.orderId(),
                 OrderStatusChangeActorType.ADMIN,
                 OrderStatus.CANCELLED
         )).isZero();
+
+        assertThat(loadPaymentIdempotency(fixture))
+                .isEqualTo(new PaymentIdempotencyState(
+                        "COMPLETED",
+                        paymentId
+                ));
     }
 
     private void assertExpiredOutcome(Fixture fixture) {
         PersistedOrder order = loadOrder(fixture.orderId());
 
-        assertThat(order.status()).isEqualTo(OrderStatus.EXPIRED.name());
-        assertThat(order.inventoryReleasedAt()).isNotNull();
+        assertThat(order.status())
+                .isEqualTo(OrderStatus.EXPIRED.name());
+
+        assertThat(order.inventoryReleasedAt())
+                .isNotNull();
+
         assertThat(loadStock(fixture.productId()))
-                .isEqualTo(INITIAL_STOCK + ORDER_QUANTITY);
-        assertThat(paymentCount(fixture.orderId())).isZero();
-        assertThat(outboxCount(fixture.orderId())).isZero();
+                .isEqualTo(
+                        INITIAL_STOCK + ORDER_QUANTITY
+                );
+
+        assertThat(paymentCount(fixture.orderId()))
+                .isZero();
+
+        assertThat(outboxCount(fixture.orderId()))
+                .isZero();
+
         assertThat(historyCount(
                 fixture.orderId(),
                 OrderStatusChangeActorType.SYSTEM,
                 OrderStatus.EXPIRED
         )).isEqualTo(1);
+
         assertThat(historyCount(
                 fixture.orderId(),
                 OrderStatusChangeActorType.PAYMENT,
                 OrderStatus.PAID
         )).isZero();
+
+        assertThat(paymentIdempotencyCount(fixture))
+                .isZero();
     }
 
     private void assertCancelledOutcome(Fixture fixture) {
         PersistedOrder order = loadOrder(fixture.orderId());
 
-        assertThat(order.status()).isEqualTo(OrderStatus.CANCELLED.name());
-        assertThat(order.inventoryReleasedAt()).isNotNull();
+        assertThat(order.status())
+                .isEqualTo(OrderStatus.CANCELLED.name());
+
+        assertThat(order.inventoryReleasedAt())
+                .isNotNull();
+
         assertThat(loadStock(fixture.productId()))
-                .isEqualTo(INITIAL_STOCK + ORDER_QUANTITY);
-        assertThat(paymentCount(fixture.orderId())).isZero();
-        assertThat(outboxCount(fixture.orderId())).isZero();
+                .isEqualTo(
+                        INITIAL_STOCK + ORDER_QUANTITY
+                );
+
+        assertThat(paymentCount(fixture.orderId()))
+                .isZero();
+
+        assertThat(outboxCount(fixture.orderId()))
+                .isZero();
+
         assertThat(historyCount(
                 fixture.orderId(),
                 OrderStatusChangeActorType.ADMIN,
                 OrderStatus.CANCELLED
         )).isEqualTo(1);
+
         assertThat(historyCount(
                 fixture.orderId(),
                 OrderStatusChangeActorType.PAYMENT,
                 OrderStatus.PAID
         )).isZero();
+
+        assertThat(paymentIdempotencyCount(fixture))
+                .isZero();
     }
 
     private Fixture seedPendingOrder() {
@@ -743,6 +791,57 @@ class OrderLifecycleRaceIntegrationTest
         );
     }
 
+    private UUID loadPaymentId(UUID orderId) {
+        return jdbcTemplate.queryForObject(
+                """
+                select id
+                from payments
+                where order_id = ?
+                """,
+                UUID.class,
+                orderId
+        );
+    }
+
+    private PaymentIdempotencyState loadPaymentIdempotency(
+            Fixture fixture
+    ) {
+        return jdbcTemplate.queryForObject(
+                """
+                select status, payment_id
+                from payment_idempotency_records
+                where user_id = ?
+                  and idempotency_key = ?
+                """,
+                (resultSet, rowNumber) ->
+                        new PaymentIdempotencyState(
+                                resultSet.getString("status"),
+                                resultSet.getObject(
+                                        "payment_id",
+                                        UUID.class
+                                )
+                        ),
+                fixture.ownerId(),
+                paymentIdempotencyKey(fixture)
+        );
+    }
+
+    private int paymentIdempotencyCount(
+            Fixture fixture
+    ) {
+        return jdbcTemplate.queryForObject(
+                """
+                select count(*)
+                from payment_idempotency_records
+                where user_id = ?
+                  and idempotency_key = ?
+                """,
+                Integer.class,
+                fixture.ownerId(),
+                paymentIdempotencyKey(fixture)
+        );
+    }
+
     private int outboxCount(UUID orderId) {
         return jdbcTemplate.queryForObject(
                 "select count(*) from outbox_events where aggregate_id = ?",
@@ -847,6 +946,11 @@ class OrderLifecycleRaceIntegrationTest
     private record PersistedOrder(
             String status,
             Instant inventoryReleasedAt
+    ) {
+    }
+    private record PaymentIdempotencyState(
+            String status,
+            UUID paymentId
     ) {
     }
 }
