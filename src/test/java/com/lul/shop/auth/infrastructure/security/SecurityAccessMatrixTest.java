@@ -102,6 +102,12 @@ class SecurityAccessMatrixTest {
     private static final SimpleGrantedAuthority ADMIN_AUTHORITY =
             new SimpleGrantedAuthority("ROLE_ADMIN");
 
+    private static final UUID CART_ID =
+            UUID.fromString("33333333-3333-4333-8333-333333333333");
+
+    private static final String ORDER_IDEMPOTENCY_KEY =
+            "checkout-request-001";
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -376,6 +382,127 @@ class SecurityAccessMatrixTest {
                     .isEqualTo("hasRole('ADMIN')");
         });
     }
+
+
+    @Test
+    void shouldRejectOrderPlacementWithoutIdempotencyKey()
+            throws Exception {
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(jwt()
+                                .jwt(builder ->
+                                        builder.subject(
+                                                USER_ID.toString()
+                                        )
+                                )
+                                .authorities(USER_AUTHORITY)
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "cartId": "%s",
+                              "cartVersion": 4
+                            }
+                            """.formatted(CART_ID)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_005"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(
+                                "Missing required header " +
+                                        "'Idempotency-Key'"
+                        ));
+
+        verifyNoInteractions(orderingService);
+    }
+
+    @Test
+    void shouldRejectOrderPlacementWithoutRequestBody()
+            throws Exception {
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(jwt()
+                                .jwt(builder ->
+                                        builder.subject(
+                                                USER_ID.toString()
+                                        )
+                                )
+                                .authorities(USER_AUTHORITY)
+                        )
+                        .header(
+                                "Idempotency-Key",
+                                ORDER_IDEMPOTENCY_KEY
+                        )
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_005"));
+
+        verifyNoInteractions(orderingService);
+    }
+
+    @Test
+    void shouldRejectOrderPlacementWithMissingBodyFields()
+            throws Exception {
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(jwt()
+                                .jwt(builder ->
+                                        builder.subject(
+                                                USER_ID.toString()
+                                        )
+                                )
+                                .authorities(USER_AUTHORITY)
+                        )
+                        .header(
+                                "Idempotency-Key",
+                                ORDER_IDEMPOTENCY_KEY
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_001"));
+
+        verifyNoInteractions(orderingService);
+    }
+
+    @Test
+    void shouldRejectOrderPlacementWithNegativeCartVersion()
+            throws Exception {
+
+        mockMvc.perform(post("/api/v1/orders")
+                        .with(jwt()
+                                .jwt(builder ->
+                                        builder.subject(
+                                                USER_ID.toString()
+                                        )
+                                )
+                                .authorities(USER_AUTHORITY)
+                        )
+                        .header(
+                                "Idempotency-Key",
+                                ORDER_IDEMPOTENCY_KEY
+                        )
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                            {
+                              "cartId": "%s",
+                              "cartVersion": -1
+                            }
+                            """.formatted(CART_ID)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_001"));
+
+        verifyNoInteractions(orderingService);
+    }
+
+
 
     private static Stream<Arguments> protectedRoutes() {
         return Stream.of(

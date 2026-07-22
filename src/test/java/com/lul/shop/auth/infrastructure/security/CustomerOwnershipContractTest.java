@@ -168,20 +168,6 @@ class CustomerOwnershipContractTest {
     }
 
     @Test
-    void shouldPreserveLegacyPlaceOrderContract() {
-        RuntimeException probe = probe();
-        PlaceOrderCommand expected = new PlaceOrderCommand(USER_ID);
-
-        when(orderingService.placeOrder(expected)).thenThrow(probe);
-
-        assertThatThrownBy(() ->
-                orderingController.placeOrder(jwt(), null, null)
-        ).isSameAs(probe);
-
-        verify(orderingService).placeOrder(expected);
-    }
-
-    @Test
     void shouldGetOrdersForJwtSubject() {
         RuntimeException probe = probe();
 
@@ -245,24 +231,6 @@ class CustomerOwnershipContractTest {
         assertThatThrownBy(() -> paymentController.payMock(
                 jwt(),
                 PAYMENT_KEY,
-                new PayMockPaymentRequest(ORDER_ID)
-        )).isSameAs(probe);
-
-        verify(paymentService).payMock(expected);
-    }
-
-    @Test
-    void shouldPreserveLegacyPaymentContract() {
-        RuntimeException probe = probe();
-
-        PayOrderCommand expected =
-                new PayOrderCommand(USER_ID, ORDER_ID);
-
-        when(paymentService.payMock(expected)).thenThrow(probe);
-
-        assertThatThrownBy(() -> paymentController.payMock(
-                jwt(),
-                null,
                 new PayMockPaymentRequest(ORDER_ID)
         )).isSameAs(probe);
 

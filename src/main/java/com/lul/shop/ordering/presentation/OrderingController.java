@@ -40,25 +40,26 @@ public class OrderingController {
     @PostMapping
     public ApiResponse<OrderResponse> placeOrder(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestHeader(
-                    name = "Idempotency-Key",
-                    required = false
-            )
+            @RequestHeader(name = "Idempotency-Key")
             String idempotencyKey,
-            @Valid @RequestBody(required = false)
+            @Valid @RequestBody
             PlaceOrderRequest request
     ) {
         PlaceOrderCommand command = new PlaceOrderCommand(
                 currentUserId(jwt),
-                request == null ? null : request.cartId(),
-                request == null ? null : request.cartVersion(),
+                request.cartId(),
+                request.cartVersion(),
                 idempotencyKey
         );
 
-        OrderResult result = orderingService.placeOrder(command);
+        OrderResult result =
+                orderingService.placeOrder(command);
 
         return ApiResponse.ok(
-                OrderResponse.from(result, orderItemImageUrlResolver)
+                OrderResponse.from(
+                        result,
+                        orderItemImageUrlResolver
+                )
         );
     }
 
