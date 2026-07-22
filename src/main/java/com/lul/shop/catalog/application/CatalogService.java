@@ -72,6 +72,12 @@ public class CatalogService {
     public ProductResult updateProduct(UUID productId, UpdateProductCommand command) {
         Product product = getProductOrThrow(productId);
 
+        if (product.getVersion() != command.expectedVersion()) {
+            throw new BusinessException(
+                    CatalogErrorCode.PRODUCT_VERSION_CONFLICT
+            );
+        }
+
         product.updateDetails(
                 command.sku(),
                 command.name(),

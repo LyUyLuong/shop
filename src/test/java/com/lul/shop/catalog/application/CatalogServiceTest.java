@@ -121,7 +121,8 @@ class CatalogServiceTest {
                         " Updated Shoes ",
                         " Updated description ",
                         new BigDecimal("249000.00"),
-                        20
+                        20,
+                        PRODUCT_VERSION
                 )
         );
 
@@ -153,7 +154,8 @@ class CatalogServiceTest {
                         "Updated Shoes",
                         null,
                         new BigDecimal("249000.00"),
-                        20
+                        20,
+                        PRODUCT_VERSION
                 )
         ))
                 .isInstanceOfSatisfying(
@@ -301,6 +303,39 @@ class CatalogServiceTest {
 
         assertThat(restored).isTrue();
         verify(productRepository).increaseStock(PRODUCT_ID, 3);
+    }
+
+    @Test
+    void shouldRejectUpdateWhenExpectedVersionIsStale() {
+        Product product = product(ProductStatus.ACTIVE, null);
+
+        when(productRepository.findById(PRODUCT_ID))
+                .thenReturn(Optional.of(product));
+
+        assertThatThrownBy(() -> service.updateProduct(
+                PRODUCT_ID,
+                new UpdateProductCommand(
+                        "sku-002",
+                        "Updated Shoes",
+                        null,
+                        new BigDecimal("249000.00"),
+                        20,
+                        PRODUCT_VERSION - 1
+                )
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(exception.getErrorCode())
+                        .isEqualTo(
+                                CatalogErrorCode.PRODUCT_VERSION_CONFLICT
+                        )
+        );
+
+        assertThat(product.getSku()).isEqualTo("SKU-001");
+        assertThat(product.getName()).isEqualTo("Running Shoes");
+
+        verify(productRepository, never())
+                .existsOtherProductWithSku(anyString(), any());
+        verify(productRepository, never()).save(any());
     }
 
     private static Product product(

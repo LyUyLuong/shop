@@ -1,5 +1,6 @@
 package com.lul.shop.catalog.infrastructure.persistence.repository;
 
+import com.lul.shop.catalog.application.CatalogErrorCode;
 import com.lul.shop.catalog.domain.Product;
 import com.lul.shop.catalog.domain.ProductRepository;
 import com.lul.shop.catalog.domain.ProductSearchCriteria;
@@ -8,6 +9,10 @@ import com.lul.shop.catalog.infrastructure.persistence.entity.ProductJpaEntity;
 import com.lul.shop.catalog.infrastructure.persistence.mapper.ProductMapper;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
+import com.lul.shop.shared.exception.BusinessException;
+import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +24,9 @@ import java.util.UUID;
 @Repository
 @Transactional(readOnly = true)
 public class ProductRepositoryImpl implements ProductRepository {
+
+    private static final String PRODUCT_SKU_UNIQUE_INDEX =
+            "idx_products_sku_lower";
 
     private final ProductJpaRepository productJpaRepository;
     private final ProductQueryRepository productQueryRepository;
@@ -105,15 +113,58 @@ public class ProductRepositoryImpl implements ProductRepository {
     @Transactional
     public Product save(Product product) {
         ProductJpaEntity entity = productMapper.toEntity(product);
-        ProductJpaEntity savedEntity = productJpaRepository.saveAndFlush(entity);
 
-        return productMapper.toDomain(savedEntity);
+        try {
+            ProductJpaEntity savedEntity =
+                    productJpaRepository.saveAndFlush(entity);
+
+            return productMapper.toDomain(savedEntity);
+        } catch (OptimisticLockingFailureException exception) {
+            throw new BusinessException(
+                    CatalogErrorCode.PRODUCT_VERSION_CONFLICT
+            );
+        } catch (DataIntegrityViolationException exception) {
+            if (isConstraintViolation(
+                    exception,
+                    PRODUCT_SKU_UNIQUE_INDEX
+            )) {
+                throw new BusinessException(
+                        CatalogErrorCode.PRODUCT_SKU_ALREADY_EXISTS
+                );
+            }
+
+            throw exception;
+        }
     }
 
     @Override
     public PageResult<Product> search(ProductSearchCriteria criteria, PageQuery pageQuery) {
         return productQueryRepository.search(criteria, pageQuery)
                 .map(productMapper::toDomain);
+    }
+
+    private boolean isConstraintViolation(
+            Throwable exception,
+            String expectedConstraint
+    ) {
+        Throwable current = exception;
+
+        while (current != null) {
+            if (current instanceof ConstraintViolationException violation
+                    && expectedConstraint.equals(
+                    violation.getConstraintName()
+            )) {
+                return true;
+            }
+
+            if (current == current.getCause()) {
+                break;
+            }
+
+            current = current.getCause();
+        }
+
+        return false;
     }
 
     private Optional<String> normalizeSku(String sku) {

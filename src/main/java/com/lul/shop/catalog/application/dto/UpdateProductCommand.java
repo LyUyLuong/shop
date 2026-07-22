@@ -8,23 +8,14 @@ public record UpdateProductCommand(
         String description,
         BigDecimal price,
         int stockQuantity,
-        Long expectedVersion
+        long expectedVersion
 ) {
 
-    public UpdateProductCommand(
-            String sku,
-            String name,
-            String description,
-            BigDecimal price,
-            int stockQuantity
-    ) {
-        this(
-                sku,
-                name,
-                description,
-                price,
-                stockQuantity,
-                null
-        );
+    public UpdateProductCommand {
+        if (expectedVersion < 0) {
+            throw new IllegalArgumentException(
+                    "expectedVersion must not be negative"
+            );
+        }
     }
 }
