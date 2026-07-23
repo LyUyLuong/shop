@@ -410,7 +410,12 @@ class SecurityAccessMatrixTest {
                         .content("""
                             {
                               "cartId": "%s",
-                              "cartVersion": 4
+                              "cartVersion": 4,
+                              "recipientName": "Nguyen Van A",
+                              "recipientPhone": "+84901234567",
+                              "shippingAddress": "123 Nguyen Trai, Ho Chi Minh City",
+                              "shippingMethod": "STANDARD",
+                              "paymentMode": "MOCK"
                             }
                             """.formatted(CART_ID)))
                 .andExpect(status().isBadRequest())
@@ -500,7 +505,12 @@ class SecurityAccessMatrixTest {
                         .content("""
                             {
                               "cartId": "%s",
-                              "cartVersion": -1
+                              "cartVersion": -1,
+                              "recipientName": "Nguyen Van A",
+                              "recipientPhone": "+84901234567",
+                              "shippingAddress": "123 Nguyen Trai, Ho Chi Minh City",
+                              "shippingMethod": "STANDARD",
+                              "paymentMode": "MOCK"
                             }
                             """.formatted(CART_ID)))
                 .andExpect(status().isBadRequest())

@@ -3,8 +3,10 @@ package com.lul.shop.ordering.application;
 import com.lul.shop.ordering.application.dto.AdminOrderDetailResult;
 import com.lul.shop.ordering.application.dto.AdminOrderSummaryResult;
 import com.lul.shop.ordering.application.dto.ChangeOrderStatusCommand;
+import com.lul.shop.ordering.application.dto.OrderFulfillmentResult;
 import com.lul.shop.ordering.application.dto.OrderItemResult;
 import com.lul.shop.ordering.application.dto.OrderStatusHistoryResult;
+import com.lul.shop.ordering.domain.FulfillmentSnapshot;
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderItem;
 import com.lul.shop.ordering.domain.OrderRepository;
@@ -133,11 +135,28 @@ public class OrderOperationsService {
                 .map(this::toItemResult)
                 .toList();
 
+        FulfillmentSnapshot fulfillment =
+                order.getFulfillment();
+
+        OrderFulfillmentResult fulfillmentResult =
+                fulfillment == null
+                        ? null
+                        : new OrderFulfillmentResult(
+                        fulfillment.recipientName(),
+                        fulfillment.recipientPhone(),
+                        fulfillment.shippingAddress(),
+                        fulfillment.shippingMethod()
+                );
+
         return new AdminOrderDetailResult(
                 order.getId(),
                 order.getUserId(),
                 order.getStatus(),
+                order.getPaymentMode(),
+                order.getSubtotalAmount(),
+                order.getShippingFee(),
                 order.getTotalAmount(),
+                fulfillmentResult,
                 items,
                 order.getCreatedAt(),
                 order.getUpdatedAt()

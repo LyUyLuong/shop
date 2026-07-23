@@ -9,6 +9,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.createMockOrder;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 
 class OrderLifecycleStateTest {
 
@@ -99,11 +101,16 @@ class OrderLifecycleStateTest {
 
     @Test
     void shouldRejectInvalidReconstructedReleaseMarker() {
-        assertThatThrownBy(() -> new Order(
+        assertThatThrownBy(() -> Order.restore(
                 ORDER_ID,
                 USER_ID,
                 OrderStatus.PAID,
-                new BigDecimal("100000.00"),
+                fulfillment(),
+                OrderPaymentMode.MOCK,
+                OrderAmounts.calculate(
+                        new BigDecimal("100000.00"),
+                        BigDecimal.ZERO
+                ),
                 List.of(orderItem()),
                 DEADLINE,
                 NOW.plusSeconds(60),
@@ -117,7 +124,11 @@ class OrderLifecycleStateTest {
     }
 
     private static Order pendingOrder() {
-        return Order.create(USER_ID, List.of(orderItem()), NOW);
+        return createMockOrder(
+                USER_ID,
+                List.of(orderItem()),
+                NOW
+        );
     }
 
     private static OrderItem orderItem() {

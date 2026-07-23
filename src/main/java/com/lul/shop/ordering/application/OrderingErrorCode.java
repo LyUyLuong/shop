@@ -18,7 +18,8 @@ public enum OrderingErrorCode implements ErrorCode {
     INVALID_IDEMPOTENCY_KEY("ORDERING_012", "Idempotency key is invalid", 400),
     IDEMPOTENCY_KEY_REUSED("ORDERING_013", "Idempotency key was reused for a different order request", 409),
     ORDER_IDEMPOTENCY_STATE_INVALID("ORDERING_014", "Order idempotency state is invalid", 500),
-    CART_CHECKOUT_CONFLICT("ORDERING_015", "Cart changed before checkout", 409);
+    CART_CHECKOUT_CONFLICT("ORDERING_015", "Cart changed before checkout", 409),
+    PAYMENT_MODE_NOT_AVAILABLE("ORDERING_016", "Payment mode is not currently available", 409);
 
     private final String code;
     private final String message;

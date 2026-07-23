@@ -16,78 +16,176 @@ public class Order {
     private UUID id;
     private UUID userId;
     private OrderStatus status;
-    private BigDecimal totalAmount;
     private List<OrderItem> items;
     private Instant expiresAt;
     private Instant inventoryReleasedAt;
     private Instant createdAt;
     private Instant updatedAt;
+    private FulfillmentSnapshot fulfillment;
+    private OrderPaymentMode paymentMode;
+    private OrderAmounts amounts;
 
-    public Order(UUID id,
-                 UUID userId,
-                 OrderStatus status,
-                 BigDecimal totalAmount,
-                 List<OrderItem> items,
-                 Instant expiresAt,
-                 Instant inventoryReleasedAt,
-                 Instant createdAt,
-                 Instant updatedAt) {
+    private Order(
+            UUID id,
+            UUID userId,
+            OrderStatus status,
+            FulfillmentSnapshot fulfillment,
+            OrderPaymentMode paymentMode,
+            OrderAmounts amounts,
+            List<OrderItem> items,
+            Instant expiresAt,
+            Instant inventoryReleasedAt,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
         this.id = Objects.requireNonNull(id, "id must not be null");
         this.userId = Objects.requireNonNull(userId, "userId must not be null");
         this.status = Objects.requireNonNull(status, "status must not be null");
+        this.paymentMode = Objects.requireNonNull(
+                paymentMode,
+                "paymentMode must not be null"
+        );
+        this.amounts = Objects.requireNonNull(
+                amounts,
+                "amounts must not be null"
+        );
 
         List<OrderItem> validItems = requireNonEmptyItems(items);
-        BigDecimal expectedTotalAmount = calculateTotalAmount(validItems);
-        BigDecimal validTotalAmount = requireNonNegativeMoney(totalAmount, "totalAmount");
+        validateItemSubtotal(validItems, amounts);
+        validatePaymentState(status, paymentMode, expiresAt);
 
-        if (validTotalAmount.compareTo(expectedTotalAmount) != 0) {
+        if (fulfillment == null
+                && (paymentMode != OrderPaymentMode.MOCK
+                || amounts.shippingFee().signum() != 0)) {
             throw new IllegalArgumentException(
-                    "totalAmount must equal sum of order item line totals"
+                    "only legacy MOCK orders may omit fulfillment"
             );
         }
 
-        Instant validExpiresAt = Objects.requireNonNull(
-                expiresAt,
-                "expiresAt must not be null"
-        );
-
-        if (createdAt != null && validExpiresAt.isBefore(createdAt)) {
+        if (createdAt != null
+                && expiresAt != null
+                && expiresAt.isBefore(createdAt)) {
             throw new IllegalArgumentException(
                     "expiresAt must not be before createdAt"
             );
         }
 
-        validateInventoryRelease(
-                status,
-                inventoryReleasedAt,
-                createdAt
-        );
+        validateInventoryRelease(status, inventoryReleasedAt, createdAt);
 
+        this.fulfillment = fulfillment;
         this.items = new ArrayList<>(validItems);
-        this.totalAmount = validTotalAmount;
-        this.expiresAt = validExpiresAt;
+        this.expiresAt = expiresAt;
         this.inventoryReleasedAt = inventoryReleasedAt;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
 
-    public static Order create(UUID userId,
-                               List<OrderItem> items,
-                               Instant now) {
+    public static Order create(
+            UUID userId,
+            List<OrderItem> items,
+            FulfillmentSnapshot fulfillment,
+            OrderPaymentMode paymentMode,
+            OrderAmounts amounts,
+            Instant now
+    ) {
+        Objects.requireNonNull(fulfillment, "fulfillment must not be null");
+        Objects.requireNonNull(paymentMode, "paymentMode must not be null");
+        Objects.requireNonNull(amounts, "amounts must not be null");
+
         Instant validNow = Objects.requireNonNull(now, "now must not be null");
         List<OrderItem> validItems = requireNonEmptyItems(items);
+
+        validateItemSubtotal(validItems, amounts);
+
+        OrderStatus initialStatus = switch (paymentMode) {
+            case MOCK -> OrderStatus.PENDING_PAYMENT;
+            case COD -> OrderStatus.CONFIRMED;
+        };
+
+        Instant expiresAt = paymentMode == OrderPaymentMode.MOCK
+                ? validNow.plus(PAYMENT_WINDOW)
+                : null;
 
         return new Order(
                 UUID.randomUUID(),
                 userId,
-                OrderStatus.PENDING_PAYMENT,
-                calculateTotalAmount(validItems),
+                initialStatus,
+                fulfillment,
+                paymentMode,
+                amounts,
                 validItems,
-                validNow.plus(PAYMENT_WINDOW),
+                expiresAt,
                 null,
                 null,
                 null
         );
+    }
+
+    public static Order restore(
+            UUID id,
+            UUID userId,
+            OrderStatus status,
+            FulfillmentSnapshot fulfillment,
+            OrderPaymentMode paymentMode,
+            OrderAmounts amounts,
+            List<OrderItem> items,
+            Instant expiresAt,
+            Instant inventoryReleasedAt,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        return new Order(
+                id,
+                userId,
+                status,
+                fulfillment,
+                paymentMode,
+                amounts,
+                items,
+                expiresAt,
+                inventoryReleasedAt,
+                createdAt,
+                updatedAt
+        );
+    }
+
+    private static void validateItemSubtotal(
+            List<OrderItem> items,
+            OrderAmounts amounts
+    ) {
+        BigDecimal itemSubtotal = items.stream()
+                .map(OrderItem::getLineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        if (amounts.subtotalAmount().compareTo(itemSubtotal) != 0) {
+            throw new IllegalArgumentException(
+                    "subtotalAmount must equal sum of order item line totals"
+            );
+        }
+    }
+
+    private static void validatePaymentState(
+            OrderStatus status,
+            OrderPaymentMode paymentMode,
+            Instant expiresAt
+    ) {
+        if (paymentMode == OrderPaymentMode.MOCK) {
+            if (expiresAt == null || status == OrderStatus.CONFIRMED) {
+                throw new IllegalArgumentException(
+                        "MOCK order requires a payment deadline and MOCK status"
+                );
+            }
+            return;
+        }
+
+        if (expiresAt != null
+                || status == OrderStatus.PENDING_PAYMENT
+                || status == OrderStatus.PAID
+                || status == OrderStatus.EXPIRED) {
+            throw new IllegalArgumentException(
+                    "COD order has an incompatible status or payment deadline"
+            );
+        }
     }
 
     public UUID getId() {
@@ -100,10 +198,6 @@ public class Order {
 
     public OrderStatus getStatus() {
         return status;
-    }
-
-    public BigDecimal getTotalAmount() {
-        return totalAmount;
     }
 
     public List<OrderItem> getItems() {
@@ -130,17 +224,43 @@ public class Order {
         return this.userId.equals(userId);
     }
 
+    public FulfillmentSnapshot getFulfillment() {
+        return fulfillment;
+    }
+
+    public OrderPaymentMode getPaymentMode() {
+        return paymentMode;
+    }
+
+    public OrderAmounts getAmounts() {
+        return amounts;
+    }
+
+    public BigDecimal getSubtotalAmount() {
+        return amounts.subtotalAmount();
+    }
+
+    public BigDecimal getShippingFee() {
+        return amounts.shippingFee();
+    }
+
+    public BigDecimal getTotalAmount() {
+        return amounts.totalAmount();
+    }
+
     public boolean isPayableAt(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
 
-        return status == OrderStatus.PENDING_PAYMENT
+        return paymentMode == OrderPaymentMode.MOCK
+                && status == OrderStatus.PENDING_PAYMENT
                 && now.isBefore(expiresAt);
     }
 
     public boolean isExpiredAt(Instant now) {
         Objects.requireNonNull(now, "now must not be null");
 
-        return status == OrderStatus.PENDING_PAYMENT
+        return paymentMode == OrderPaymentMode.MOCK
+                && status == OrderStatus.PENDING_PAYMENT
                 && !now.isBefore(expiresAt);
     }
 
@@ -219,11 +339,27 @@ public class Order {
         Objects.requireNonNull(targetStatus, "targetStatus must not be null");
 
         return switch (status) {
-            case PENDING_PAYMENT -> targetStatus == OrderStatus.PAID
-                    || targetStatus == OrderStatus.CANCELLED;
-            case PAID -> targetStatus == OrderStatus.PACKING;
-            case PACKING -> targetStatus == OrderStatus.SHIPPED;
-            case SHIPPED -> targetStatus == OrderStatus.COMPLETED;
+            case PENDING_PAYMENT ->
+                    paymentMode == OrderPaymentMode.MOCK
+                            && (targetStatus == OrderStatus.PAID
+                            || targetStatus == OrderStatus.CANCELLED);
+
+            case CONFIRMED ->
+                    paymentMode == OrderPaymentMode.COD
+                            && (targetStatus == OrderStatus.PACKING
+                            || targetStatus == OrderStatus.CANCELLED);
+
+            case PAID ->
+                    paymentMode == OrderPaymentMode.MOCK
+                            && targetStatus == OrderStatus.PACKING;
+
+            case PACKING ->
+                    targetStatus == OrderStatus.SHIPPED;
+
+            case SHIPPED ->
+                    paymentMode == OrderPaymentMode.MOCK
+                            && targetStatus == OrderStatus.COMPLETED;
+
             case COMPLETED, CANCELLED, EXPIRED -> false;
         };
     }
@@ -259,22 +395,4 @@ public class Order {
         return List.copyOf(items);
     }
 
-    private static BigDecimal calculateTotalAmount(List<OrderItem> items) {
-        return items.stream()
-                .map(OrderItem::getLineTotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    private static BigDecimal requireNonNegativeMoney(
-            BigDecimal value,
-            String fieldName
-    ) {
-        Objects.requireNonNull(value, fieldName + " must not be null");
-
-        if (value.signum() < 0) {
-            throw new IllegalArgumentException(fieldName + " must be >= 0");
-        }
-
-        return value;
-    }
 }

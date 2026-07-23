@@ -9,6 +9,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.createMockOrder;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 
 class OrderLifecycleCompatibilityTest {
 
@@ -39,7 +41,7 @@ class OrderLifecycleCompatibilityTest {
 
     @Test
     void shouldKeepGenericPendingToExpiredTransitionDisabled() {
-        Order order = Order.create(
+        Order order = createMockOrder(
                 USER_ID,
                 List.of(orderItem()),
                 CREATED_AT
@@ -63,11 +65,16 @@ class OrderLifecycleCompatibilityTest {
     }
 
     private static Order reconstructedExpiredOrder() {
-        return new Order(
+        return Order.restore(
                 ORDER_ID,
                 USER_ID,
                 OrderStatus.EXPIRED,
-                new BigDecimal("100000.00"),
+                fulfillment(),
+                OrderPaymentMode.MOCK,
+                OrderAmounts.calculate(
+                        new BigDecimal("100000.00"),
+                        BigDecimal.ZERO
+                ),
                 List.of(orderItem()),
                 CREATED_AT.plusSeconds(30 * 60),
                 null,

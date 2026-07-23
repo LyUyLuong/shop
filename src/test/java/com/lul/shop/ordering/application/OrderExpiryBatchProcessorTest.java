@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.createMockOrder;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -98,7 +99,7 @@ class OrderExpiryBatchProcessorTest {
     }
 
     private static Order expiredOrder() {
-        return Order.create(
+        return createMockOrder(
                 USER_ID,
                 List.of(OrderItem.create(
                         PRODUCT_ID,

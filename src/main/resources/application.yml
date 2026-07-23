@@ -77,6 +77,9 @@ app:
     secret-key: ${AWS_SECRET_KEY:}
 
   ordering:
+    checkout:
+      standard-shipping-fee: ${ORDER_STANDARD_SHIPPING_FEE:0.00}
+      cod-enabled: ${ORDER_COD_ENABLED:false}
     expiry:
       enabled: ${ORDER_EXPIRY_ENABLED:false}
       batch-size: ${ORDER_EXPIRY_BATCH_SIZE:20}

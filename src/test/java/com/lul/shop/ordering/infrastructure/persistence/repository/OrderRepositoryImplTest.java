@@ -28,6 +28,8 @@ import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.createMockOrder;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 
 @Transactional
 class OrderRepositoryImplTest extends PostgresIntegrationTest {
@@ -53,7 +55,7 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
         Instant orderPlacedAt = Instant.now()
                 .truncatedTo(ChronoUnit.MICROS);
 
-        Order order = Order.create(
+        Order order = createMockOrder(
                 USER_ID,
                 List.of(
                         OrderItem.create(
@@ -85,6 +87,13 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
         assertThat(found.getId()).isEqualTo(saved.getId());
         assertThat(found.getUserId()).isEqualTo(USER_ID);
         assertThat(found.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+        assertThat(found.getPaymentMode())
+                .isEqualTo(com.lul.shop.ordering.domain.OrderPaymentMode.MOCK);
+        assertThat(found.getFulfillment()).isEqualTo(fulfillment());
+        assertThat(found.getSubtotalAmount())
+                .isEqualByComparingTo("448000.00");
+        assertThat(found.getShippingFee())
+                .isEqualByComparingTo("0.00");
         assertThat(found.getTotalAmount()).isEqualByComparingTo("448000.00");
         assertThat(found.getExpiresAt())
                 .isEqualTo(orderPlacedAt.plusSeconds(30 * 60));
@@ -462,7 +471,7 @@ class OrderRepositoryImplTest extends PostgresIntegrationTest {
     }
 
     private Order singleItemOrder(UUID userId, UUID productId, String productSku) {
-        return Order.create(
+        return createMockOrder(
                 userId,
                 List.of(OrderItem.create(
                         productId,

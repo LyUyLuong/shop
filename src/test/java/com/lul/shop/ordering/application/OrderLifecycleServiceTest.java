@@ -24,6 +24,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.createMockOrder;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -679,7 +680,7 @@ class OrderLifecycleServiceTest {
     }
 
     private static Order paidOrder() {
-        Order order = Order.create(
+        Order order = createMockOrder(
                 USER_ID,
                 List.of(
                         orderItem(
@@ -698,7 +699,7 @@ class OrderLifecycleServiceTest {
     }
 
     private static Order pendingOrderWithDuplicateProducts() {
-        return Order.create(
+        return createMockOrder(
                 USER_ID,
                 List.of(
                         orderItem(

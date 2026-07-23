@@ -9,6 +9,7 @@ import com.lul.shop.cart.presentation.dto.request.UpdateCartItemRequest;
 import com.lul.shop.ordering.application.OrderItemImageService;
 import com.lul.shop.ordering.application.OrderingService;
 import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
+import com.lul.shop.ordering.domain.OrderPaymentMode;
 import com.lul.shop.ordering.presentation.OrderItemImageUrlResolver;
 import com.lul.shop.ordering.presentation.OrderingController;
 import com.lul.shop.payment.application.PaymentService;
@@ -27,6 +28,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -153,7 +155,9 @@ class CustomerOwnershipContractTest {
                 USER_ID,
                 CART_ID,
                 CART_VERSION,
-                ORDER_KEY
+                ORDER_KEY,
+                fulfillment(),
+                OrderPaymentMode.MOCK
         );
 
         when(orderingService.placeOrder(expected)).thenThrow(probe);
@@ -161,7 +165,15 @@ class CustomerOwnershipContractTest {
         assertThatThrownBy(() -> orderingController.placeOrder(
                 jwt(),
                 ORDER_KEY,
-                new PlaceOrderRequest(CART_ID, CART_VERSION)
+                new PlaceOrderRequest(
+                        CART_ID,
+                        CART_VERSION,
+                        fulfillment().recipientName(),
+                        fulfillment().recipientPhone(),
+                        fulfillment().shippingAddress(),
+                        fulfillment().shippingMethod(),
+                        OrderPaymentMode.MOCK
+                )
         )).isSameAs(probe);
 
         verify(orderingService).placeOrder(expected);

@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.createMockOrder;
 
 class OrderIdempotencyRepositoryImplTest
         extends PostgresIntegrationTest {
@@ -175,7 +176,7 @@ class OrderIdempotencyRepositoryImplTest
                     repository.insertIfAbsent(claim)
             ).isTrue();
 
-            Order order = Order.create(
+            Order order = createMockOrder(
                     USER_ID,
                     List.of(OrderItem.create(
                             PRODUCT_ID,

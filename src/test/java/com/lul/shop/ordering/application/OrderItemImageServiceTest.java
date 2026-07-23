@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static org.assertj.core.api.Assertions.*;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.createMockOrder;
 
 class OrderItemImageServiceTest {
 
@@ -119,7 +120,7 @@ class OrderItemImageServiceTest {
     }
 
     private static Order orderWithImage(UUID userId, String imageKey) {
-        return Order.create(
+        return createMockOrder(
                 userId,
                 List.of(OrderItem.create(
                         PRODUCT_ID,

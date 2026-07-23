@@ -4,7 +4,15 @@ import com.lul.shop.ordering.application.dto.AdminOrderDetailResult;
 import com.lul.shop.ordering.application.dto.AdminOrderSummaryResult;
 import com.lul.shop.ordering.application.dto.ChangeOrderStatusCommand;
 import com.lul.shop.ordering.application.dto.OrderStatusHistoryResult;
-import com.lul.shop.ordering.domain.*;
+import com.lul.shop.ordering.domain.Order;
+import com.lul.shop.ordering.domain.OrderItem;
+import com.lul.shop.ordering.domain.OrderPaymentMode;
+import com.lul.shop.ordering.domain.OrderRepository;
+import com.lul.shop.ordering.domain.OrderSearchCriteria;
+import com.lul.shop.ordering.domain.OrderStatus;
+import com.lul.shop.ordering.domain.OrderStatusHistory;
+import com.lul.shop.ordering.domain.OrderStatusHistoryRepository;
+import com.lul.shop.ordering.domain.OrderSummary;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.BusinessException;
@@ -12,9 +20,18 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.*;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.createMockOrder;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -95,6 +112,22 @@ class OrderOperationsServiceTest {
         assertThat(result.id()).isEqualTo(order.getId());
         assertThat(result.userId()).isEqualTo(USER_ID);
         assertThat(result.status()).isEqualTo(OrderStatus.PAID);
+        assertThat(result.paymentMode())
+                .isEqualTo(OrderPaymentMode.MOCK);
+        assertThat(result.subtotalAmount())
+                .isEqualByComparingTo("199000.00");
+        assertThat(result.shippingFee())
+                .isEqualByComparingTo("0.00");
+        assertThat(result.totalAmount())
+                .isEqualByComparingTo("199000.00");
+        assertThat(result.fulfillment().recipientName())
+                .isEqualTo(fulfillment().recipientName());
+        assertThat(result.fulfillment().recipientPhone())
+                .isEqualTo(fulfillment().recipientPhone());
+        assertThat(result.fulfillment().shippingAddress())
+                .isEqualTo(fulfillment().shippingAddress());
+        assertThat(result.fulfillment().shippingMethod())
+                .isEqualTo(fulfillment().shippingMethod());
         assertThat(result.items()).hasSize(1);
         assertThat(result.items().get(0).productId()).isEqualTo(PRODUCT_ID);
     }
@@ -135,7 +168,7 @@ class OrderOperationsServiceTest {
     }
 
     private static Order paidOrder() {
-        Order order = Order.create(
+        Order order = createMockOrder(
                 USER_ID,
                 List.of(OrderItem.create(
                         PRODUCT_ID,
