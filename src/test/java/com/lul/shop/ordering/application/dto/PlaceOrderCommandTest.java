@@ -1,11 +1,13 @@
 package com.lul.shop.ordering.application.dto;
 
+import com.lul.shop.ordering.domain.OrderPaymentMode;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 
 class PlaceOrderCommandTest {
 
@@ -29,13 +31,18 @@ class PlaceOrderCommandTest {
                         USER_ID,
                         CART_ID,
                         4L,
-                        KEY
+                        KEY,
+                        fulfillment(),
+                        OrderPaymentMode.MOCK
                 );
 
         assertThat(command.userId()).isEqualTo(USER_ID);
         assertThat(command.cartId()).isEqualTo(CART_ID);
         assertThat(command.cartVersion()).isEqualTo(4L);
         assertThat(command.idempotencyKey()).isEqualTo(KEY);
+        assertThat(command.fulfillment()).isEqualTo(fulfillment());
+        assertThat(command.paymentMode())
+                .isEqualTo(OrderPaymentMode.MOCK);
     }
 
     @Test
@@ -45,7 +52,9 @@ class PlaceOrderCommandTest {
                         null,
                         CART_ID,
                         4L,
-                        KEY
+                        KEY,
+                        fulfillment(),
+                        OrderPaymentMode.MOCK
                 )
         )
                 .isInstanceOf(NullPointerException.class)
@@ -56,7 +65,9 @@ class PlaceOrderCommandTest {
                         USER_ID,
                         null,
                         4L,
-                        KEY
+                        KEY,
+                        fulfillment(),
+                        OrderPaymentMode.MOCK
                 )
         )
                 .isInstanceOf(NullPointerException.class)
@@ -67,12 +78,40 @@ class PlaceOrderCommandTest {
                         USER_ID,
                         CART_ID,
                         -1L,
-                        KEY
+                        KEY,
+                        fulfillment(),
+                        OrderPaymentMode.MOCK
                 )
         )
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
                         "cartVersion must not be negative"
                 );
+
+        assertThatThrownBy(() ->
+                new PlaceOrderCommand(
+                        USER_ID,
+                        CART_ID,
+                        4L,
+                        KEY,
+                        null,
+                        OrderPaymentMode.MOCK
+                )
+        )
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("fulfillment must not be null");
+
+        assertThatThrownBy(() ->
+                new PlaceOrderCommand(
+                        USER_ID,
+                        CART_ID,
+                        4L,
+                        KEY,
+                        fulfillment(),
+                        null
+                )
+        )
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("paymentMode must not be null");
     }
 }

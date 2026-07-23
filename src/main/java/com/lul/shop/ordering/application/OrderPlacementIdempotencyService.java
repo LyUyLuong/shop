@@ -1,5 +1,7 @@
 package com.lul.shop.ordering.application;
 
+import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
+import com.lul.shop.ordering.domain.FulfillmentSnapshot;
 import com.lul.shop.ordering.domain.OrderIdempotencyRecord;
 import com.lul.shop.ordering.domain.OrderIdempotencyRepository;
 import com.lul.shop.shared.exception.BusinessException;
@@ -35,30 +37,18 @@ public class OrderPlacementIdempotencyService {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public Decision begin(
-            UUID userId,
-            UUID cartId,
-            long cartVersion,
-            String idempotencyKey
-    ) {
-        Objects.requireNonNull(userId, "userId must not be null");
-        Objects.requireNonNull(cartId, "cartId must not be null");
+    public Decision begin(PlaceOrderCommand command) {
+        Objects.requireNonNull(command, "command must not be null");
 
-        if (cartVersion < 0) {
-            throw new IllegalArgumentException(
-                    "cartVersion must not be negative"
-            );
-        }
+        validateKey(command.idempotencyKey());
 
-        validateKey(idempotencyKey);
-
-        String fingerprint = fingerprint(cartId, cartVersion);
+        String fingerprint = fingerprint(command);
         Instant now = clock.instant();
 
         OrderIdempotencyRecord candidate =
                 OrderIdempotencyRecord.processing(
-                        userId,
-                        idempotencyKey,
+                        command.userId(),
+                        command.idempotencyKey(),
                         fingerprint,
                         now
                 );
@@ -68,9 +58,13 @@ public class OrderPlacementIdempotencyService {
         }
 
         OrderIdempotencyRecord existing = repository
-                .findByUserIdAndKey(userId, idempotencyKey)
+                .findByUserIdAndKey(
+                        command.userId(),
+                        command.idempotencyKey()
+                )
                 .orElseThrow(() -> new BusinessException(
-                        OrderingErrorCode.ORDER_IDEMPOTENCY_STATE_INVALID
+                        OrderingErrorCode
+                                .ORDER_IDEMPOTENCY_STATE_INVALID
                 ));
 
         if (!existing.matchesFingerprint(fingerprint)) {
@@ -81,7 +75,8 @@ public class OrderPlacementIdempotencyService {
 
         if (!existing.isCompleted()) {
             throw new BusinessException(
-                    OrderingErrorCode.ORDER_IDEMPOTENCY_STATE_INVALID
+                    OrderingErrorCode
+                            .ORDER_IDEMPOTENCY_STATE_INVALID
             );
         }
 
@@ -106,19 +101,24 @@ public class OrderPlacementIdempotencyService {
         }
     }
 
-    String fingerprint(UUID cartId, long cartVersion) {
-        Objects.requireNonNull(cartId, "cartId must not be null");
-
-        if (cartVersion < 0) {
-            throw new IllegalArgumentException(
-                    "cartVersion must not be negative"
-            );
-        }
+    String fingerprint(PlaceOrderCommand command) {
+        FulfillmentSnapshot fulfillment =
+                command.fulfillment();
 
         String canonicalRequest =
-                "ORDER_PLACE\n"
-                        + "cartId=" + cartId + "\n"
-                        + "cartVersion=" + cartVersion;
+                "ORDER_PLACE_V2\n"
+                        + "cartId=" + command.cartId() + "\n"
+                        + "cartVersion=" + command.cartVersion() + "\n"
+                        + "recipientName="
+                        + fulfillment.recipientName() + "\n"
+                        + "recipientPhone="
+                        + fulfillment.recipientPhone() + "\n"
+                        + "shippingAddress="
+                        + fulfillment.shippingAddress() + "\n"
+                        + "shippingMethod="
+                        + fulfillment.shippingMethod().name() + "\n"
+                        + "paymentMode="
+                        + command.paymentMode().name();
 
         try {
             MessageDigest digest =

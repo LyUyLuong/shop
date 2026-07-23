@@ -1,7 +1,11 @@
 package com.lul.shop.ordering.application;
 
+import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
+import com.lul.shop.ordering.domain.FulfillmentSnapshot;
 import com.lul.shop.ordering.domain.OrderIdempotencyRecord;
 import com.lul.shop.ordering.domain.OrderIdempotencyRepository;
+import com.lul.shop.ordering.domain.OrderPaymentMode;
+import com.lul.shop.ordering.domain.ShippingMethod;
 import com.lul.shop.shared.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,15 +14,16 @@ import org.mockito.ArgumentCaptor;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.List;
 
-import static org.mockito.Mockito.times;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -56,7 +61,6 @@ class OrderPlacementIdempotencyServiceTest {
     @BeforeEach
     void setUp() {
         repository = mock(OrderIdempotencyRepository.class);
-
         service = new OrderPlacementIdempotencyService(
                 repository,
                 CLOCK
@@ -64,18 +68,13 @@ class OrderPlacementIdempotencyServiceTest {
     }
 
     @Test
-    void shouldOwnNewClaimWithStableRequestFingerprint() {
+    void shouldOwnNewClaimWithStableVersionedFingerprint() {
         when(repository.insertIfAbsent(
                 any(OrderIdempotencyRecord.class)
         )).thenReturn(true);
 
         OrderPlacementIdempotencyService.Decision decision =
-                service.begin(
-                        USER_ID,
-                        CART_ID,
-                        4L,
-                        KEY
-                );
+                service.begin(command());
 
         assertThat(decision.isReplay()).isFalse();
         assertThat(decision.claimId()).isNotNull();
@@ -94,8 +93,8 @@ class OrderPlacementIdempotencyServiceTest {
         assertThat(claim.userId()).isEqualTo(USER_ID);
         assertThat(claim.idempotencyKey()).isEqualTo(KEY);
         assertThat(claim.requestFingerprint()).isEqualTo(
-                "16e89e8272a400a404f3d4c16cfbeac5"
-                        + "efd9dcd35196e23e50f710d2bd43e39c"
+                "ccb0efedbfa5973e103e3fe66a78f119"
+                        + "0f693e39869016d0f33a730ebc31b86d"
         );
         assertThat(claim.status()).isEqualTo(
                 OrderIdempotencyRecord.Status.PROCESSING
@@ -106,9 +105,8 @@ class OrderPlacementIdempotencyServiceTest {
     }
 
     @Test
-    void shouldReplayCompletedOrderForSameRequest() {
-        String fingerprint =
-                service.fingerprint(CART_ID, 4L);
+    void shouldReplayCompletedOrderForSameCanonicalRequest() {
+        String fingerprint = service.fingerprint(command());
 
         when(repository.insertIfAbsent(
                 any(OrderIdempotencyRecord.class)
@@ -120,12 +118,7 @@ class OrderPlacementIdempotencyServiceTest {
                 ));
 
         OrderPlacementIdempotencyService.Decision decision =
-                service.begin(
-                        USER_ID,
-                        CART_ID,
-                        4L,
-                        KEY
-                );
+                service.begin(command());
 
         assertThat(decision.isReplay()).isTrue();
         assertThat(decision.claimId()).isNull();
@@ -136,7 +129,7 @@ class OrderPlacementIdempotencyServiceTest {
     @Test
     void shouldRejectKeyReusedForDifferentCartVersion() {
         String previousFingerprint =
-                service.fingerprint(CART_ID, 3L);
+                service.fingerprint(command(3L, KEY));
 
         when(repository.insertIfAbsent(
                 any(OrderIdempotencyRecord.class)
@@ -147,14 +140,7 @@ class OrderPlacementIdempotencyServiceTest {
                         completedRecord(previousFingerprint)
                 ));
 
-        assertThatThrownBy(() ->
-                service.begin(
-                        USER_ID,
-                        CART_ID,
-                        4L,
-                        KEY
-                )
-        )
+        assertThatThrownBy(() -> service.begin(command()))
                 .isInstanceOfSatisfying(
                         BusinessException.class,
                         exception -> assertThat(
@@ -168,8 +154,7 @@ class OrderPlacementIdempotencyServiceTest {
 
     @Test
     void shouldRejectUnfinishedConflictingClaim() {
-        String fingerprint =
-                service.fingerprint(CART_ID, 4L);
+        String fingerprint = service.fingerprint(command());
 
         OrderIdempotencyRecord processing =
                 new OrderIdempotencyRecord(
@@ -190,14 +175,7 @@ class OrderPlacementIdempotencyServiceTest {
         when(repository.findByUserIdAndKey(USER_ID, KEY))
                 .thenReturn(Optional.of(processing));
 
-        assertInvalidState(() ->
-                service.begin(
-                        USER_ID,
-                        CART_ID,
-                        4L,
-                        KEY
-                )
-        );
+        assertInvalidState(() -> service.begin(command()));
     }
 
     @Test
@@ -209,14 +187,7 @@ class OrderPlacementIdempotencyServiceTest {
         when(repository.findByUserIdAndKey(USER_ID, KEY))
                 .thenReturn(Optional.empty());
 
-        assertInvalidState(() ->
-                service.begin(
-                        USER_ID,
-                        CART_ID,
-                        4L,
-                        KEY
-                )
-        );
+        assertInvalidState(() -> service.begin(command()));
     }
 
     @Test
@@ -228,8 +199,8 @@ class OrderPlacementIdempotencyServiceTest {
                 any(OrderIdempotencyRecord.class)
         )).thenReturn(true);
 
-        service.begin(USER_ID, CART_ID, 4L, minimumKey);
-        service.begin(USER_ID, CART_ID, 4L, maximumKey);
+        service.begin(command(4L, minimumKey));
+        service.begin(command(4L, maximumKey));
 
         ArgumentCaptor<OrderIdempotencyRecord> captor =
                 ArgumentCaptor.forClass(
@@ -268,23 +239,66 @@ class OrderPlacementIdempotencyServiceTest {
     }
 
     @Test
-    void shouldIncludeCartIdAndVersionInFingerprint() {
-        UUID anotherCartId =
-                UUID.fromString(
-                        "55555555-5555-4555-8555-555555555555"
+    void shouldFingerprintTheCompleteCanonicalCheckoutRequest() {
+        UUID anotherCartId = UUID.fromString(
+                "55555555-5555-4555-8555-555555555555"
+        );
+
+        PlaceOrderCommand original = command();
+        String originalFingerprint =
+                service.fingerprint(original);
+
+        FulfillmentSnapshot equivalentFulfillment =
+                new FulfillmentSnapshot(
+                        "  Nguyen   Van A  ",
+                        "+84 (90) 123-4567",
+                        "  123  Nguyen Trai,  Ho Chi Minh City  ",
+                        ShippingMethod.STANDARD
                 );
 
-        String original =
-                service.fingerprint(CART_ID, 4L);
+        assertThat(service.fingerprint(new PlaceOrderCommand(
+                USER_ID,
+                CART_ID,
+                4L,
+                KEY,
+                equivalentFulfillment,
+                OrderPaymentMode.MOCK
+        ))).isEqualTo(originalFingerprint);
 
-        assertThat(service.fingerprint(CART_ID, 4L))
-                .isEqualTo(original);
+        assertThat(service.fingerprint(new PlaceOrderCommand(
+                USER_ID,
+                anotherCartId,
+                4L,
+                KEY,
+                fulfillment(),
+                OrderPaymentMode.MOCK
+        ))).isNotEqualTo(originalFingerprint);
 
-        assertThat(service.fingerprint(anotherCartId, 4L))
-                .isNotEqualTo(original);
+        assertThat(service.fingerprint(command(5L, KEY)))
+                .isNotEqualTo(originalFingerprint);
 
-        assertThat(service.fingerprint(CART_ID, 5L))
-                .isNotEqualTo(original);
+        assertThat(service.fingerprint(new PlaceOrderCommand(
+                USER_ID,
+                CART_ID,
+                4L,
+                KEY,
+                new FulfillmentSnapshot(
+                        "Tran Van B",
+                        fulfillment().recipientPhone(),
+                        fulfillment().shippingAddress(),
+                        ShippingMethod.STANDARD
+                ),
+                OrderPaymentMode.MOCK
+        ))).isNotEqualTo(originalFingerprint);
+
+        assertThat(service.fingerprint(new PlaceOrderCommand(
+                USER_ID,
+                CART_ID,
+                4L,
+                KEY,
+                fulfillment(),
+                OrderPaymentMode.COD
+        ))).isNotEqualTo(originalFingerprint);
     }
 
     @Test
@@ -319,12 +333,7 @@ class OrderPlacementIdempotencyServiceTest {
 
     private void assertInvalidKey(String idempotencyKey) {
         assertThatThrownBy(() ->
-                service.begin(
-                        USER_ID,
-                        CART_ID,
-                        4L,
-                        idempotencyKey
-                )
+                service.begin(command(4L, idempotencyKey))
         )
                 .as(
                         "idempotency key should be rejected: <%s>",
@@ -339,6 +348,24 @@ class OrderPlacementIdempotencyServiceTest {
                                         .INVALID_IDEMPOTENCY_KEY
                         )
                 );
+    }
+
+    private PlaceOrderCommand command() {
+        return command(4L, KEY);
+    }
+
+    private PlaceOrderCommand command(
+            long cartVersion,
+            String idempotencyKey
+    ) {
+        return new PlaceOrderCommand(
+                USER_ID,
+                CART_ID,
+                cartVersion,
+                idempotencyKey,
+                fulfillment(),
+                OrderPaymentMode.MOCK
+        );
     }
 
     private OrderIdempotencyRecord completedRecord(

@@ -6,6 +6,7 @@ import com.lul.shop.ordering.application.dto.OrderResult;
 import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
 import com.lul.shop.ordering.domain.OrderIdempotencyRecord;
 import com.lul.shop.ordering.domain.OrderIdempotencyRepository;
+import com.lul.shop.ordering.domain.OrderPaymentMode;
 import com.lul.shop.shared.exception.BusinessException;
 import com.lul.shop.shared.test.PostgresIntegrationTest;
 import org.junit.jupiter.api.AfterEach;
@@ -30,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -597,7 +599,9 @@ class OrderPlacementRaceIntegrationTest
                 userId,
                 cartId,
                 cartVersion,
-                key
+                key,
+                fulfillment(),
+                OrderPaymentMode.MOCK
         );
     }
 
@@ -612,8 +616,12 @@ class OrderPlacementRaceIntegrationTest
     ) {
         assertThat(result.userId())
                 .isEqualTo(fixture.firstUserId());
-        assertThat(result.totalAmount())
+        assertThat(result.subtotalAmount())
                 .isEqualByComparingTo("350.00");
+        assertThat(result.shippingFee())
+                .isEqualByComparingTo("30000.00");
+        assertThat(result.totalAmount())
+                .isEqualByComparingTo("30350.00");
         assertThat(result.items())
                 .extracting(item -> item.productId())
                 .containsExactly(

@@ -5,6 +5,7 @@ import com.lul.shop.ordering.application.OrderingService;
 import com.lul.shop.ordering.application.dto.OrderItemImageContent;
 import com.lul.shop.ordering.application.dto.OrderResult;
 import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
+import com.lul.shop.ordering.domain.FulfillmentSnapshot;
 import com.lul.shop.ordering.presentation.dto.request.PlaceOrderRequest;
 import com.lul.shop.ordering.presentation.dto.response.OrderResponse;
 import com.lul.shop.shared.api.ApiResponse;
@@ -45,11 +46,21 @@ public class OrderingController {
             @Valid @RequestBody
             PlaceOrderRequest request
     ) {
+        FulfillmentSnapshot fulfillment =
+                new FulfillmentSnapshot(
+                        request.recipientName(),
+                        request.recipientPhone(),
+                        request.shippingAddress(),
+                        request.shippingMethod()
+                );
+
         PlaceOrderCommand command = new PlaceOrderCommand(
                 currentUserId(jwt),
                 request.cartId(),
                 request.cartVersion(),
-                idempotencyKey
+                idempotencyKey,
+                fulfillment,
+                request.paymentMode()
         );
 
         OrderResult result =

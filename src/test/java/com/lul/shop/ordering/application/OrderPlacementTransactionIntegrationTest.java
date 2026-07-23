@@ -3,6 +3,7 @@ package com.lul.shop.ordering.application;
 import com.lul.shop.ordering.application.dto.OrderResult;
 import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
 import com.lul.shop.ordering.domain.OrderIdempotencyRepository;
+import com.lul.shop.ordering.domain.OrderPaymentMode;
 import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.shared.exception.BusinessException;
 import com.lul.shop.shared.test.PostgresIntegrationTest;
@@ -22,6 +23,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import org.junit.jupiter.api.BeforeEach;
@@ -107,14 +109,40 @@ class OrderPlacementTransactionIntegrationTest
 
         assertThat(result.status())
                 .isEqualTo(OrderStatus.PENDING_PAYMENT);
-        assertThat(result.totalAmount())
+        assertThat(result.subtotalAmount())
                 .isEqualByComparingTo("950.00");
+        assertThat(result.shippingFee())
+                .isEqualByComparingTo("30000.00");
+        assertThat(result.totalAmount())
+                .isEqualByComparingTo("30950.00");
         assertThat(result.items())
                 .extracting(item -> item.productId())
                 .containsExactly(
                         fixture.firstProductId(),
                         fixture.secondProductId()
                 );
+
+        CheckoutSnapshotState checkoutSnapshot =
+                loadCheckoutSnapshot(result.id());
+
+        assertThat(checkoutSnapshot.recipientName())
+                .isEqualTo(fulfillment().recipientName());
+        assertThat(checkoutSnapshot.recipientPhone())
+                .isEqualTo(fulfillment().recipientPhone());
+        assertThat(checkoutSnapshot.shippingAddress())
+                .isEqualTo(fulfillment().shippingAddress());
+        assertThat(checkoutSnapshot.shippingMethod())
+                .isEqualTo("STANDARD");
+        assertThat(checkoutSnapshot.paymentMode())
+                .isEqualTo("MOCK");
+        assertThat(checkoutSnapshot.subtotalAmount())
+                .isEqualByComparingTo("950.00");
+        assertThat(checkoutSnapshot.shippingFee())
+                .isEqualByComparingTo("30000.00");
+        assertThat(checkoutSnapshot.totalAmount())
+                .isEqualByComparingTo("30950.00");
+        assertThat(checkoutSnapshot.expiresAt())
+                .isNotNull();
 
         assertThat(orderCount(fixture.userId())).isEqualTo(1);
         assertThat(orderItemCount(result.id())).isEqualTo(2);
@@ -316,7 +344,9 @@ class OrderPlacementTransactionIntegrationTest
                 fixture.userId(),
                 fixture.cartId(),
                 CART_VERSION,
-                fixture.idempotencyKey()
+                fixture.idempotencyKey(),
+                fulfillment(),
+                OrderPaymentMode.MOCK
         );
     }
 
@@ -395,6 +425,57 @@ class OrderPlacementTransactionIntegrationTest
         );
     }
 
+    private CheckoutSnapshotState loadCheckoutSnapshot(
+            UUID orderId
+    ) {
+        return jdbcTemplate.queryForObject(
+                """
+                select recipient_name,
+                       recipient_phone,
+                       shipping_address,
+                       shipping_method,
+                       payment_mode,
+                       subtotal_amount,
+                       shipping_fee,
+                       total_amount,
+                       expires_at
+                from orders
+                where id = ?
+                """,
+                (resultSet, rowNumber) ->
+                        new CheckoutSnapshotState(
+                                resultSet.getString(
+                                        "recipient_name"
+                                ),
+                                resultSet.getString(
+                                        "recipient_phone"
+                                ),
+                                resultSet.getString(
+                                        "shipping_address"
+                                ),
+                                resultSet.getString(
+                                        "shipping_method"
+                                ),
+                                resultSet.getString(
+                                        "payment_mode"
+                                ),
+                                resultSet.getBigDecimal(
+                                        "subtotal_amount"
+                                ),
+                                resultSet.getBigDecimal(
+                                        "shipping_fee"
+                                ),
+                                resultSet.getBigDecimal(
+                                        "total_amount"
+                                ),
+                                resultSet.getTimestamp(
+                                        "expires_at"
+                                ).toInstant()
+                        ),
+                orderId
+        );
+    }
+
     private int orderCount(UUID userId) {
         return count(
                 "select count(*) from orders where user_id = ?",
@@ -461,6 +542,19 @@ class OrderPlacementTransactionIntegrationTest
     private record IdempotencyState(
             String status,
             UUID orderId
+    ) {
+    }
+
+    private record CheckoutSnapshotState(
+            String recipientName,
+            String recipientPhone,
+            String shippingAddress,
+            String shippingMethod,
+            String paymentMode,
+            BigDecimal subtotalAmount,
+            BigDecimal shippingFee,
+            BigDecimal totalAmount,
+            Instant expiresAt
     ) {
     }
 }

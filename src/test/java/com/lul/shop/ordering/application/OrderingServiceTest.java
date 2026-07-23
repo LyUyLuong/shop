@@ -5,11 +5,15 @@ import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
 import com.lul.shop.ordering.application.port.CheckoutCartClient;
 import com.lul.shop.ordering.application.port.CheckoutCartItemSnapshot;
 import com.lul.shop.ordering.application.port.CheckoutCartSnapshot;
+import com.lul.shop.ordering.application.port.CheckoutPaymentModePolicy;
 import com.lul.shop.ordering.application.port.CheckoutProductClient;
 import com.lul.shop.ordering.application.port.CheckoutProductSnapshot;
+import com.lul.shop.ordering.application.port.ShippingFeePolicy;
+import com.lul.shop.ordering.domain.FulfillmentSnapshot;
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderIdempotencyRecord;
 import com.lul.shop.ordering.domain.OrderIdempotencyRepository;
+import com.lul.shop.ordering.domain.OrderPaymentMode;
 import com.lul.shop.ordering.domain.OrderRepository;
 import com.lul.shop.ordering.domain.OrderSearchCriteria;
 import com.lul.shop.ordering.domain.OrderStatus;
@@ -35,6 +39,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static com.lul.shop.ordering.support.OrderingTestFixtures.fulfillment;
 
 class OrderingServiceTest {
 
@@ -66,6 +71,9 @@ class OrderingServiceTest {
 
     private static final String IDEMPOTENCY_KEY =
             "checkout-request-001";
+
+    private static final BigDecimal SHIPPING_FEE =
+            new BigDecimal("30000.00");
 
     private static final Instant NOW =
             Instant.parse("2026-07-16T10:00:00Z");
@@ -139,8 +147,33 @@ class OrderingServiceTest {
         assertThat(result.userId()).isEqualTo(USER_ID);
         assertThat(result.status())
                 .isEqualTo(OrderStatus.PENDING_PAYMENT);
-        assertThat(result.totalAmount())
+        assertThat(result.paymentMode())
+                .isEqualTo(OrderPaymentMode.MOCK);
+        assertThat(result.subtotalAmount())
                 .isEqualByComparingTo("448000.00");
+        assertThat(result.shippingFee())
+                .isEqualByComparingTo(SHIPPING_FEE);
+        assertThat(result.totalAmount())
+                .isEqualByComparingTo("478000.00");
+        assertThat(result.fulfillment())
+                .satisfies(snapshot -> {
+                    assertThat(snapshot.recipientName())
+                            .isEqualTo(
+                                    fulfillment().recipientName()
+                            );
+                    assertThat(snapshot.recipientPhone())
+                            .isEqualTo(
+                                    fulfillment().recipientPhone()
+                            );
+                    assertThat(snapshot.shippingAddress())
+                            .isEqualTo(
+                                    fulfillment().shippingAddress()
+                            );
+                    assertThat(snapshot.shippingMethod())
+                            .isEqualTo(
+                                    fulfillment().shippingMethod()
+                            );
+                });
 
         assertThat(result.items())
                 .extracting(item -> item.productId())
@@ -202,6 +235,123 @@ class OrderingServiceTest {
 
         assertThat(completedRecord.orderId())
                 .isEqualTo(result.id());
+    }
+
+    @Test
+    void shouldCreateCodOrderConfirmedWithoutPaymentDeadline() {
+        InMemoryOrderRepository orderRepository =
+                new InMemoryOrderRepository();
+        FakeOrderIdempotencyRepository idempotencyRepository =
+                new FakeOrderIdempotencyRepository();
+        FakeCheckoutCartClient cartClient =
+                new FakeCheckoutCartClient(
+                        new CheckoutCartSnapshot(
+                                CART_ID,
+                                USER_ID,
+                                CART_VERSION,
+                                List.of(
+                                        new CheckoutCartItemSnapshot(
+                                                PRODUCT_A_ID,
+                                                1
+                                        )
+                                )
+                        )
+                );
+        FakeCheckoutProductClient productClient =
+                new FakeCheckoutProductClient();
+
+        productClient.products.put(
+                PRODUCT_A_ID,
+                product(
+                        PRODUCT_A_ID,
+                        "SHOP-A-001",
+                        "Workshop Hoodie",
+                        "100000.00",
+                        "products/a/hoodie.jpg"
+                )
+        );
+
+        OrderingService service = newService(
+                orderRepository,
+                cartClient,
+                productClient,
+                idempotencyRepository
+        );
+
+        OrderResult result = service.placeOrder(
+                command(OrderPaymentMode.COD)
+        );
+
+        assertThat(result.status())
+                .isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(result.paymentMode())
+                .isEqualTo(OrderPaymentMode.COD);
+        assertThat(result.subtotalAmount())
+                .isEqualByComparingTo("100000.00");
+        assertThat(result.shippingFee())
+                .isEqualByComparingTo(SHIPPING_FEE);
+        assertThat(result.totalAmount())
+                .isEqualByComparingTo("130000.00");
+        assertThat(orderRepository.savedOrders)
+                .singleElement()
+                .satisfies(order ->
+                        assertThat(order.getExpiresAt()).isNull()
+                );
+    }
+
+    @Test
+    void shouldRejectDisabledCodBeforeClaimingCart() {
+        InMemoryOrderRepository orderRepository =
+                new InMemoryOrderRepository();
+        FakeOrderIdempotencyRepository idempotencyRepository =
+                new FakeOrderIdempotencyRepository();
+        FakeCheckoutCartClient cartClient =
+                new FakeCheckoutCartClient(
+                        new CheckoutCartSnapshot(
+                                CART_ID,
+                                USER_ID,
+                                CART_VERSION,
+                                List.of()
+                        )
+                );
+        FakeCheckoutProductClient productClient =
+                new FakeCheckoutProductClient();
+        OrderPlacementIdempotencyService idempotencyService =
+                new OrderPlacementIdempotencyService(
+                        idempotencyRepository,
+                        CLOCK
+                );
+
+        OrderingService service = new OrderingService(
+                orderRepository,
+                cartClient,
+                productClient,
+                idempotencyService,
+                shippingFeePolicy(),
+                paymentMode ->
+                        paymentMode == OrderPaymentMode.MOCK,
+                CLOCK
+        );
+
+        assertThatThrownBy(() ->
+                service.placeOrder(
+                        command(OrderPaymentMode.COD)
+                )
+        )
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(
+                                exception.getErrorCode()
+                        ).isEqualTo(
+                                OrderingErrorCode
+                                        .PAYMENT_MODE_NOT_AVAILABLE
+                        )
+                );
+
+        assertThat(cartClient.claimCalls).isEmpty();
+        assertThat(productClient.productLookupCalls).isEmpty();
+        assertThat(productClient.stockDecreaseCalls).isEmpty();
+        assertThat(orderRepository.savedOrders).isEmpty();
     }
 
     @Test
@@ -447,10 +597,7 @@ class OrderingServiceTest {
                 );
 
         String fingerprint =
-                idempotencyService.fingerprint(
-                        CART_ID,
-                        CART_VERSION
-                );
+                idempotencyService.fingerprint(command());
 
         idempotencyRepository.put(
                 new OrderIdempotencyRecord(
@@ -470,6 +617,8 @@ class OrderingServiceTest {
                 cartClient,
                 productClient,
                 idempotencyService,
+                shippingFeePolicy(),
+                enabledPaymentModes(),
                 CLOCK
         );
 
@@ -509,17 +658,35 @@ class OrderingServiceTest {
                 cartClient,
                 productClient,
                 idempotencyService,
+                shippingFeePolicy(),
+                enabledPaymentModes(),
                 CLOCK
         );
     }
 
     private static PlaceOrderCommand command() {
+        return command(OrderPaymentMode.MOCK);
+    }
+
+    private static PlaceOrderCommand command(
+            OrderPaymentMode paymentMode
+    ) {
         return new PlaceOrderCommand(
                 USER_ID,
                 CART_ID,
                 CART_VERSION,
-                IDEMPOTENCY_KEY
+                IDEMPOTENCY_KEY,
+                fulfillment(),
+                paymentMode
         );
+    }
+
+    private static ShippingFeePolicy shippingFeePolicy() {
+        return shippingMethod -> SHIPPING_FEE;
+    }
+
+    private static CheckoutPaymentModePolicy enabledPaymentModes() {
+        return paymentMode -> true;
     }
 
     private static CheckoutProductSnapshot product(
