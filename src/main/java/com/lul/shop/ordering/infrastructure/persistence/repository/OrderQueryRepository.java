@@ -1,16 +1,22 @@
 package com.lul.shop.ordering.infrastructure.persistence.repository;
 
+import com.lul.shop.ordering.domain.CustomerOrderSummary;
+import com.lul.shop.ordering.domain.OrderPaymentMode;
 import com.lul.shop.ordering.domain.OrderSearchCriteria;
+import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.ordering.domain.OrderSummary;
 import com.lul.shop.ordering.infrastructure.persistence.entity.OrderJpaEntity;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.Tuple;
 import jakarta.persistence.TypedQuery;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +93,169 @@ public class OrderQueryRepository {
                 .toList();
 
         return new PageResult<>(content, page, size, totalElements, totalPages, hasNext);
+    }
+
+    public PageResult<CustomerOrderSummary>
+    findCustomerSummariesByUserId(
+            UUID userId,
+            PageQuery pageQuery
+    ) {
+        Objects.requireNonNull(
+                userId,
+                "userId must not be null"
+        );
+        Objects.requireNonNull(
+                pageQuery,
+                "pageQuery must not be null"
+        );
+
+        int page = pageQuery.page();
+        int size = pageQuery.size();
+        int offset = calculateOffset(page, size);
+
+        long totalElements = entityManager.createQuery("""
+                    select count(orderEntity.id)
+                    from OrderJpaEntity orderEntity
+                    where orderEntity.userId = :userId
+                    """, Long.class)
+                .setParameter("userId", userId)
+                .getSingleResult();
+
+        int totalPages = calculateTotalPages(
+                totalElements,
+                size
+        );
+
+        if (totalElements == 0L || offset >= totalElements) {
+            return new PageResult<>(
+                    List.of(),
+                    page,
+                    size,
+                    totalElements,
+                    totalPages,
+                    false
+            );
+        }
+
+        List<UUID> orderIds = entityManager.createQuery("""
+                    select orderEntity.id
+                    from OrderJpaEntity orderEntity
+                    where orderEntity.userId = :userId
+                    order by
+                        orderEntity.createdAt desc,
+                        orderEntity.id desc
+                    """, UUID.class)
+                .setParameter("userId", userId)
+                .setFirstResult(offset)
+                .setMaxResults(size)
+                .getResultList();
+
+        if (orderIds.isEmpty()) {
+            return new PageResult<>(
+                    List.of(),
+                    page,
+                    size,
+                    totalElements,
+                    totalPages,
+                    false
+            );
+        }
+
+        List<CustomerOrderSummary> content =
+                entityManager.createQuery("""
+                            select
+                                orderEntity.id as orderId,
+                                orderEntity.status as orderStatus,
+                                orderEntity.paymentMode as paymentMode,
+                                orderEntity.totalAmount as totalAmount,
+                                count(orderItem.id) as itemCount,
+                                orderEntity.createdAt as createdAt,
+                                orderEntity.updatedAt as updatedAt
+                            from OrderJpaEntity orderEntity
+                            left join orderEntity.items orderItem
+                            where orderEntity.userId = :userId
+                              and orderEntity.id in :orderIds
+                            group by
+                                orderEntity.id,
+                                orderEntity.status,
+                                orderEntity.paymentMode,
+                                orderEntity.totalAmount,
+                                orderEntity.createdAt,
+                                orderEntity.updatedAt
+                            order by
+                                orderEntity.createdAt desc,
+                                orderEntity.id desc
+                            """, Tuple.class)
+                        .setParameter("userId", userId)
+                        .setParameter("orderIds", orderIds)
+                        .getResultStream()
+                        .map(this::toCustomerOrderSummary)
+                        .toList();
+
+        return new PageResult<>(
+                content,
+                page,
+                size,
+                totalElements,
+                totalPages,
+                page < totalPages - 1
+        );
+    }
+
+    private CustomerOrderSummary toCustomerOrderSummary(
+            Tuple row
+    ) {
+        OrderPaymentMode paymentMode =
+                row.get(
+                        "paymentMode",
+                        OrderPaymentMode.class
+                );
+
+        return new CustomerOrderSummary(
+                row.get("orderId", UUID.class),
+                row.get("orderStatus", OrderStatus.class),
+                paymentMode == null
+                        ? OrderPaymentMode.MOCK
+                        : paymentMode,
+                row.get("totalAmount", BigDecimal.class),
+                Math.toIntExact(
+                        row.get("itemCount", Long.class)
+                ),
+                row.get("createdAt", Instant.class),
+                row.get("updatedAt", Instant.class)
+        );
+    }
+
+    private int calculateOffset(int page, int size) {
+        long offset = (long) page * size;
+
+        if (offset > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(
+                    "page offset is too large"
+            );
+        }
+
+        return (int) offset;
+    }
+
+    private int calculateTotalPages(
+            long totalElements,
+            int size
+    ) {
+        if (totalElements == 0L) {
+            return 0;
+        }
+
+        long totalPages =
+                1L + (totalElements - 1L) / size;
+
+        if (totalPages > Integer.MAX_VALUE) {
+            throw new IllegalStateException(
+                    "totalPages exceeds supported range"
+            );
+        }
+
+        return (int) totalPages;
     }
 
     private Map<UUID, Integer> countItemsByOrderIds(List<UUID> orderIds) {

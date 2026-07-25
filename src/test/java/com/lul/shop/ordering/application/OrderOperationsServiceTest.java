@@ -4,6 +4,7 @@ import com.lul.shop.ordering.application.dto.AdminOrderDetailResult;
 import com.lul.shop.ordering.application.dto.AdminOrderSummaryResult;
 import com.lul.shop.ordering.application.dto.ChangeOrderStatusCommand;
 import com.lul.shop.ordering.application.dto.OrderStatusHistoryResult;
+import com.lul.shop.ordering.domain.CustomerOrderSummary;
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderItem;
 import com.lul.shop.ordering.domain.OrderPaymentMode;
@@ -252,6 +253,18 @@ class OrderOperationsServiceTest {
         ) {
             throw new UnsupportedOperationException(
                     "claimExpiredForUpdate is not used in this test"
+            );
+        }
+
+        @Override
+        public PageResult<CustomerOrderSummary>
+        findCustomerSummariesByUserId(
+                UUID userId,
+                PageQuery pageQuery
+        ) {
+            throw new UnsupportedOperationException(
+                    "findCustomerSummariesByUserId is not used "
+                            + "in OrderOperationsServiceTest"
             );
         }
     }

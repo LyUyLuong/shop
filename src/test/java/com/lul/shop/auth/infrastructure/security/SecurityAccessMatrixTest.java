@@ -12,7 +12,10 @@ import com.lul.shop.ordering.application.OrderItemImageService;
 import com.lul.shop.ordering.application.OrderOperationsService;
 import com.lul.shop.ordering.application.OrderingService;
 import com.lul.shop.ordering.application.dto.AdminOrderSummaryResult;
+import com.lul.shop.ordering.application.dto.CustomerOrderSummaryResult;
+import com.lul.shop.ordering.domain.OrderPaymentMode;
 import com.lul.shop.ordering.domain.OrderSearchCriteria;
+import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.ordering.presentation.AdminOrderController;
 import com.lul.shop.ordering.presentation.OrderItemImageUrlResolver;
 import com.lul.shop.ordering.presentation.OrderingController;
@@ -242,6 +245,115 @@ class SecurityAccessMatrixTest {
                 .andExpect(jsonPath("$.success").value(true));
 
         verify(orderingService).getOrders(USER_ID);
+    }
+
+    @Test
+    void shouldAllowAuthenticatedUserToAccessCustomerOrderPage()
+            throws Exception {
+
+        Instant createdAt =
+                Instant.parse("2026-07-23T08:00:00Z");
+
+        CustomerOrderSummaryResult summary =
+                new CustomerOrderSummaryResult(
+                        ORDER_ID,
+                        OrderStatus.CONFIRMED,
+                        OrderPaymentMode.COD,
+                        new BigDecimal("230000.00"),
+                        2,
+                        createdAt,
+                        createdAt.plusSeconds(60)
+                );
+
+        PageResult<CustomerOrderSummaryResult> page =
+                new PageResult<>(
+                        List.of(summary),
+                        0,
+                        20,
+                        1,
+                        1,
+                        false
+                );
+
+        when(orderingService.getOrderPage(
+                USER_ID,
+                new PageQuery(0, 20)
+        )).thenReturn(page);
+
+        mockMvc.perform(
+                        get("/api/v1/orders/page")
+                                .with(jwt()
+                                        .jwt(builder ->
+                                                builder.subject(
+                                                        USER_ID.toString()
+                                                )
+                                        )
+                                        .authorities(
+                                                USER_AUTHORITY
+                                        )
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success")
+                        .value(true))
+                .andExpect(jsonPath("$.data.page")
+                        .value(0))
+                .andExpect(jsonPath("$.data.size")
+                        .value(20))
+                .andExpect(jsonPath("$.data.totalElements")
+                        .value(1))
+                .andExpect(jsonPath("$.data.totalPages")
+                        .value(1))
+                .andExpect(jsonPath("$.data.hasNext")
+                        .value(false))
+                .andExpect(jsonPath("$.data.content[0].id")
+                        .value(ORDER_ID.toString()))
+                .andExpect(jsonPath("$.data.content[0].status")
+                        .value("CONFIRMED"))
+                .andExpect(jsonPath(
+                        "$.data.content[0].paymentMode"
+                ).value("COD"))
+                .andExpect(jsonPath(
+                        "$.data.content[0].itemCount"
+                ).value(2))
+                .andExpect(jsonPath(
+                        "$.data.content[0].userId"
+                ).doesNotExist())
+                .andExpect(jsonPath(
+                        "$.data.content[0].items"
+                ).doesNotExist());
+
+        verify(orderingService).getOrderPage(
+                USER_ID,
+                new PageQuery(0, 20)
+        );
+    }
+
+    @Test
+    void shouldRejectInvalidCustomerOrderPageSize()
+            throws Exception {
+
+        mockMvc.perform(
+                        get("/api/v1/orders/page")
+                                .param("size", "0")
+                                .with(jwt()
+                                        .jwt(builder ->
+                                                builder.subject(
+                                                        USER_ID.toString()
+                                                )
+                                        )
+                                        .authorities(
+                                                USER_AUTHORITY
+                                        )
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success")
+                        .value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_005"));
+
+        verifyNoInteractions(orderingService);
     }
 
     @ParameterizedTest(name = "USER cannot access {0}")
@@ -573,6 +685,10 @@ class SecurityAccessMatrixTest {
                 Arguments.of(
                         HttpMethod.GET,
                         "/api/v1/admin/orders"
+                ),
+                Arguments.of(
+                        HttpMethod.GET,
+                        "/api/v1/orders/page"
                 )
         );
     }

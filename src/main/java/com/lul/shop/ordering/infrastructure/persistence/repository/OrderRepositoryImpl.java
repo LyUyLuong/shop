@@ -1,5 +1,6 @@
 package com.lul.shop.ordering.infrastructure.persistence.repository;
 
+import com.lul.shop.ordering.domain.CustomerOrderSummary;
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderRepository;
 import com.lul.shop.ordering.domain.OrderSearchCriteria;
@@ -102,6 +103,19 @@ public class OrderRepositoryImpl implements OrderRepository {
                 .stream()
                 .map(orderMapper::toDomain)
                 .toList();
+    }
+
+    @Override
+    public PageResult<CustomerOrderSummary>
+    findCustomerSummariesByUserId(
+            UUID userId,
+            PageQuery pageQuery
+    ) {
+        return orderQueryRepository
+                .findCustomerSummariesByUserId(
+                        userId,
+                        pageQuery
+                );
     }
 
     @Override
