@@ -180,6 +180,18 @@ class OrderItemImageServiceTest {
         }
 
         @Override
+        public PageResult<CustomerOrderSummary>
+        findCustomerSummariesByUserId(
+                UUID userId,
+                PageQuery pageQuery
+        ) {
+            throw new UnsupportedOperationException(
+                    "findCustomerSummariesByUserId is not used "
+                            + "in OrderItemImageServiceTest"
+            );
+        }
+
+        @Override
         public PageResult<OrderSummary> searchSummaries(OrderSearchCriteria criteria, PageQuery pageQuery) {
             throw new UnsupportedOperationException("searchSummaries is not used in OrderItemImageServiceTest");
         }

@@ -9,7 +9,8 @@ import com.lul.shop.ordering.application.port.CheckoutPaymentModePolicy;
 import com.lul.shop.ordering.application.port.CheckoutProductClient;
 import com.lul.shop.ordering.application.port.CheckoutProductSnapshot;
 import com.lul.shop.ordering.application.port.ShippingFeePolicy;
-import com.lul.shop.ordering.domain.FulfillmentSnapshot;
+import com.lul.shop.ordering.application.dto.CustomerOrderSummaryResult;
+import com.lul.shop.ordering.domain.CustomerOrderSummary;
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderIdempotencyRecord;
 import com.lul.shop.ordering.domain.OrderIdempotencyRepository;
@@ -640,6 +641,85 @@ class OrderingServiceTest {
         assertThat(orderRepository.savedOrders).isEmpty();
     }
 
+    @Test
+    void shouldReturnMappedCustomerOrderSummaryPage() {
+        UUID orderId = UUID.fromString(
+                "77777777-7777-4777-8777-777777777777"
+        );
+
+        PageQuery pageQuery = new PageQuery(1, 2);
+
+        CustomerOrderSummary summary =
+                new CustomerOrderSummary(
+                        orderId,
+                        OrderStatus.CONFIRMED,
+                        OrderPaymentMode.COD,
+                        new BigDecimal("230000.00"),
+                        3,
+                        NOW.minusSeconds(120),
+                        NOW.minusSeconds(60)
+                );
+
+        InMemoryOrderRepository orderRepository =
+                new InMemoryOrderRepository();
+
+        orderRepository.customerSummaryResult =
+                new PageResult<>(
+                        List.of(summary),
+                        1,
+                        2,
+                        3,
+                        2,
+                        false
+                );
+
+        OrderingService service = newService(
+                orderRepository,
+                new FakeCheckoutCartClient(
+                        new CheckoutCartSnapshot(
+                                CART_ID,
+                                USER_ID,
+                                CART_VERSION,
+                                List.of()
+                        )
+                ),
+                new FakeCheckoutProductClient(),
+                new FakeOrderIdempotencyRepository()
+        );
+
+        PageResult<CustomerOrderSummaryResult> result =
+                service.getOrderPage(USER_ID, pageQuery);
+
+        assertThat(orderRepository.lastCustomerSummaryUserId)
+                .isEqualTo(USER_ID);
+
+        assertThat(orderRepository.lastCustomerSummaryPageQuery)
+                .isEqualTo(pageQuery);
+
+        assertThat(result.page()).isEqualTo(1);
+        assertThat(result.size()).isEqualTo(2);
+        assertThat(result.totalElements()).isEqualTo(3);
+        assertThat(result.totalPages()).isEqualTo(2);
+        assertThat(result.hasNext()).isFalse();
+        assertThat(result.content()).hasSize(1);
+
+        CustomerOrderSummaryResult mapped =
+                result.content().get(0);
+
+        assertThat(mapped.id()).isEqualTo(orderId);
+        assertThat(mapped.status())
+                .isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(mapped.paymentMode())
+                .isEqualTo(OrderPaymentMode.COD);
+        assertThat(mapped.totalAmount())
+                .isEqualByComparingTo("230000.00");
+        assertThat(mapped.itemCount()).isEqualTo(3);
+        assertThat(mapped.createdAt())
+                .isEqualTo(summary.createdAt());
+        assertThat(mapped.updatedAt())
+                .isEqualTo(summary.updatedAt());
+    }
+
     private OrderingService newService(
             InMemoryOrderRepository orderRepository,
             FakeCheckoutCartClient cartClient,
@@ -714,6 +794,20 @@ class OrderingServiceTest {
         private final List<Order> savedOrders =
                 new ArrayList<>();
 
+        private PageResult<CustomerOrderSummary>
+                customerSummaryResult =
+                new PageResult<>(
+                        List.of(),
+                        0,
+                        20,
+                        0,
+                        0,
+                        false
+                );
+
+        private UUID lastCustomerSummaryUserId;
+        private PageQuery lastCustomerSummaryPageQuery;
+
         @Override
         public Order save(Order order) {
             orders.put(order.getId(), order);
@@ -787,6 +881,18 @@ class OrderingServiceTest {
                     "claimExpiredForUpdate is not used "
                             + "in OrderingServiceTest"
             );
+        }
+
+        @Override
+        public PageResult<CustomerOrderSummary>
+        findCustomerSummariesByUserId(
+                UUID userId,
+                PageQuery pageQuery
+        ) {
+            lastCustomerSummaryUserId = userId;
+            lastCustomerSummaryPageQuery = pageQuery;
+
+            return customerSummaryResult;
         }
     }
 

@@ -2,13 +2,18 @@ package com.lul.shop.ordering.presentation;
 
 import com.lul.shop.ordering.application.OrderItemImageService;
 import com.lul.shop.ordering.application.OrderingService;
+import com.lul.shop.ordering.application.dto.CustomerOrderSummaryResult;
 import com.lul.shop.ordering.application.dto.OrderItemImageContent;
 import com.lul.shop.ordering.application.dto.OrderResult;
 import com.lul.shop.ordering.application.dto.PlaceOrderCommand;
 import com.lul.shop.ordering.domain.FulfillmentSnapshot;
 import com.lul.shop.ordering.presentation.dto.request.PlaceOrderRequest;
+import com.lul.shop.ordering.presentation.dto.response.CustomerOrderSummaryResponse;
 import com.lul.shop.ordering.presentation.dto.response.OrderResponse;
 import com.lul.shop.shared.api.ApiResponse;
+import com.lul.shop.shared.api.PageResponse;
+import com.lul.shop.shared.domain.PageQuery;
+import com.lul.shop.shared.domain.PageResult;
 import jakarta.validation.Valid;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.CacheControl;
@@ -25,6 +30,8 @@ import java.util.concurrent.TimeUnit;
 @RestController
 @RequestMapping("/orders")
 public class OrderingController {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final OrderingService orderingService;
     private final OrderItemImageService orderItemImageService;
@@ -84,6 +91,28 @@ public class OrderingController {
         return ApiResponse.ok(response);
     }
 
+    @GetMapping("/page")
+    public ApiResponse<PageResponse<CustomerOrderSummaryResponse>>
+    getOrderPage(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        PageResult<CustomerOrderSummaryResult> result =
+                orderingService.getOrderPage(
+                        currentUserId(jwt),
+                        toPageQuery(page, size)
+                );
+
+        return ApiResponse.ok(
+                PageResponse.from(
+                        result.map(
+                                CustomerOrderSummaryResponse::from
+                        )
+                )
+        );
+    }
+
     @GetMapping("/{orderId}")
     public ApiResponse<OrderResponse> getOrder(@AuthenticationPrincipal Jwt jwt,
                                                @PathVariable UUID orderId) {
@@ -111,6 +140,13 @@ public class OrderingController {
                 .contentLength(image.contentLength())
                 .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePrivate())
                 .body(new InputStreamResource(image.content()));
+    }
+
+    private PageQuery toPageQuery(int page, int size) {
+        return new PageQuery(
+                page,
+                Math.min(size, MAX_PAGE_SIZE)
+        );
     }
 
     private UUID currentUserId(Jwt jwt) {

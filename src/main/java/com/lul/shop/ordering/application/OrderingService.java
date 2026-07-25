@@ -1,5 +1,6 @@
 package com.lul.shop.ordering.application;
 
+import com.lul.shop.ordering.application.dto.CustomerOrderSummaryResult;
 import com.lul.shop.ordering.application.dto.OrderFulfillmentResult;
 import com.lul.shop.ordering.application.dto.OrderItemResult;
 import com.lul.shop.ordering.application.dto.OrderResult;
@@ -11,11 +12,14 @@ import com.lul.shop.ordering.application.port.CheckoutPaymentModePolicy;
 import com.lul.shop.ordering.application.port.CheckoutProductClient;
 import com.lul.shop.ordering.application.port.CheckoutProductSnapshot;
 import com.lul.shop.ordering.application.port.ShippingFeePolicy;
+import com.lul.shop.ordering.domain.CustomerOrderSummary;
 import com.lul.shop.ordering.domain.FulfillmentSnapshot;
 import com.lul.shop.ordering.domain.Order;
 import com.lul.shop.ordering.domain.OrderAmounts;
 import com.lul.shop.ordering.domain.OrderItem;
 import com.lul.shop.ordering.domain.OrderRepository;
+import com.lul.shop.shared.domain.PageQuery;
+import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -204,6 +208,28 @@ public class OrderingService {
         return toResult(order);
     }
 
+    public PageResult<CustomerOrderSummaryResult>
+    getOrderPage(
+            UUID userId,
+            PageQuery pageQuery
+    ) {
+        Objects.requireNonNull(
+                userId,
+                "userId must not be null"
+        );
+        Objects.requireNonNull(
+                pageQuery,
+                "pageQuery must not be null"
+        );
+
+        return orderRepository
+                .findCustomerSummariesByUserId(
+                        userId,
+                        pageQuery
+                )
+                .map(this::toCustomerOrderSummaryResult);
+    }
+
     private OrderResult replayOrder(
             UUID userId,
             UUID orderId
@@ -255,6 +281,21 @@ public class OrderingService {
                 product.imageKey(),
                 product.price(),
                 cartItem.quantity()
+        );
+    }
+
+    private CustomerOrderSummaryResult
+    toCustomerOrderSummaryResult(
+            CustomerOrderSummary summary
+    ) {
+        return new CustomerOrderSummaryResult(
+                summary.id(),
+                summary.status(),
+                summary.paymentMode(),
+                summary.totalAmount(),
+                summary.itemCount(),
+                summary.createdAt(),
+                summary.updatedAt()
         );
     }
 

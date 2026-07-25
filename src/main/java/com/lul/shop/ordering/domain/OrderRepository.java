@@ -25,6 +25,12 @@ public interface OrderRepository {
 
     List<Order> findByUserId(UUID userId);
 
+    PageResult<CustomerOrderSummary>
+    findCustomerSummariesByUserId(
+            UUID userId,
+            PageQuery pageQuery
+    );
+
     PageResult<OrderSummary> searchSummaries(
             OrderSearchCriteria criteria,
             PageQuery pageQuery

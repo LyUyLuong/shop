@@ -17,6 +17,7 @@ import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.presentation.PaymentController;
 import com.lul.shop.payment.presentation.dto.request.PayMockPaymentRequest;
 import com.lul.shop.ordering.presentation.dto.request.PlaceOrderRequest;
+import com.lul.shop.shared.domain.PageQuery;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -189,6 +190,29 @@ class CustomerOwnershipContractTest {
                 .isSameAs(probe);
 
         verify(orderingService).getOrders(USER_ID);
+    }
+
+    @Test
+    void shouldGetBoundedOrderPageForJwtSubject() {
+        RuntimeException probe = probe();
+
+        when(orderingService.getOrderPage(
+                USER_ID,
+                new PageQuery(2, 100)
+        )).thenThrow(probe);
+
+        assertThatThrownBy(() ->
+                orderingController.getOrderPage(
+                        jwt(),
+                        2,
+                        500
+                )
+        ).isSameAs(probe);
+
+        verify(orderingService).getOrderPage(
+                USER_ID,
+                new PageQuery(2, 100)
+        );
     }
 
     @Test
