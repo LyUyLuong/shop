@@ -14,6 +14,7 @@ import com.lul.shop.ordering.presentation.OrderItemImageUrlResolver;
 import com.lul.shop.ordering.presentation.OrderingController;
 import com.lul.shop.payment.application.PaymentService;
 import com.lul.shop.payment.application.dto.PayOrderCommand;
+import com.lul.shop.payment.presentation.MockPaymentController;
 import com.lul.shop.payment.presentation.PaymentController;
 import com.lul.shop.payment.presentation.dto.request.PayMockPaymentRequest;
 import com.lul.shop.ordering.presentation.dto.request.PlaceOrderRequest;
@@ -85,6 +86,9 @@ class CustomerOwnershipContractTest {
 
     @InjectMocks
     private PaymentController paymentController;
+
+    @InjectMocks
+    private MockPaymentController mockPaymentController;
 
     @Test
     void shouldGetCartForJwtSubject() {
@@ -264,7 +268,7 @@ class CustomerOwnershipContractTest {
 
         when(paymentService.payMock(expected)).thenThrow(probe);
 
-        assertThatThrownBy(() -> paymentController.payMock(
+        assertThatThrownBy(() -> mockPaymentController.payMock(
                 jwt(),
                 PAYMENT_KEY,
                 new PayMockPaymentRequest(ORDER_ID)

@@ -5,6 +5,9 @@ import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.application.dto.PaymentResult;
 import com.lul.shop.payment.application.port.PayableOrderClient;
 import com.lul.shop.payment.application.port.PayableOrderTransitionSnapshot;
+import com.lul.shop.payment.application.port.PaymentProvider;
+import com.lul.shop.payment.application.port.PaymentProviderRequest;
+import com.lul.shop.payment.application.port.PaymentProviderResult;
 import com.lul.shop.payment.domain.Payment;
 import com.lul.shop.payment.domain.PaymentMethod;
 import com.lul.shop.payment.domain.PaymentRepository;
@@ -16,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -29,6 +33,7 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final PayableOrderClient payableOrderClient;
     private final PaymentIdempotencyService idempotencyService;
+    private final PaymentProviderRegistry providerRegistry;
     private final OutboxService outboxService;
     private final Clock clock;
 
@@ -36,12 +41,14 @@ public class PaymentService {
             PaymentRepository paymentRepository,
             PayableOrderClient payableOrderClient,
             PaymentIdempotencyService idempotencyService,
+            PaymentProviderRegistry providerRegistry,
             OutboxService outboxService,
             Clock clock
     ) {
         this.paymentRepository = paymentRepository;
         this.payableOrderClient = payableOrderClient;
         this.idempotencyService = idempotencyService;
+        this.providerRegistry = providerRegistry;
         this.outboxService = outboxService;
         this.clock = clock;
     }
@@ -79,9 +86,15 @@ public class PaymentService {
 
         Payment payment = switch (order.outcome()) {
             case NEWLY_PAID ->
-                    createSucceededPayment(order);
+                    createSucceededPayment(
+                            order,
+                            PaymentMethod.MOCK
+                    );
             case ALREADY_PAID ->
-                    loadExistingPayment(order);
+                    loadExistingPayment(
+                            order,
+                            PaymentMethod.MOCK
+                    );
         };
 
         idempotencyService.complete(
@@ -124,10 +137,11 @@ public class PaymentService {
                 .findById(paymentId)
                 .orElseThrow(this::invalidIdempotencyState);
 
-        requireSucceededMockPayment(
+        requireSucceededPayment(
                 payment,
                 command.userId(),
-                command.orderId()
+                command.orderId(),
+                PaymentMethod.MOCK
         );
 
         log.info(
@@ -143,14 +157,43 @@ public class PaymentService {
     }
 
     private Payment createSucceededPayment(
-            PayableOrderTransitionSnapshot order
+            PayableOrderTransitionSnapshot order,
+            PaymentMethod method
     ) {
-        Payment payment = Payment.createSucceededMock(
+        Instant requestedAt = clock.instant();
+
+        Payment payment = Payment.createPending(
                 order.orderId(),
                 order.userId(),
                 order.totalAmount(),
-                clock.instant()
+                method
         );
+
+        PaymentProvider provider =
+                providerRegistry.resolve(method);
+
+        PaymentProviderResult providerResult =
+                Objects.requireNonNull(
+                        provider.process(
+                                new PaymentProviderRequest(
+                                        payment.getId(),
+                                        order.orderId(),
+                                        order.userId(),
+                                        order.totalAmount(),
+                                        requestedAt
+                                )
+                        ),
+                        "provider result must not be null"
+                );
+
+        if (!providerResult.isSucceeded()) {
+            throw new BusinessException(
+                    PaymentErrorCode
+                            .PAYMENT_PROVIDER_REJECTED
+            );
+        }
+
+        payment.succeed(providerResult.processedAt());
 
         Payment savedPayment =
                 paymentRepository.save(payment);
@@ -185,16 +228,18 @@ public class PaymentService {
     }
 
     private Payment loadExistingPayment(
-            PayableOrderTransitionSnapshot order
+            PayableOrderTransitionSnapshot order,
+            PaymentMethod method
     ) {
         Payment payment = paymentRepository
                 .findByOrderId(order.orderId())
                 .orElseThrow(this::invalidIdempotencyState);
 
-        requireSucceededMockPayment(
+        requireSucceededPayment(
                 payment,
                 order.userId(),
-                order.orderId()
+                order.orderId(),
+                method
         );
 
         if (payment.getAmount()
@@ -226,16 +271,16 @@ public class PaymentService {
         }
     }
 
-    private void requireSucceededMockPayment(
+    private void requireSucceededPayment(
             Payment payment,
             UUID userId,
-            UUID orderId
+            UUID orderId,
+            PaymentMethod method
     ) {
         if (
                 !payment.getUserId().equals(userId)
                         || !payment.getOrderId().equals(orderId)
-                        || payment.getMethod()
-                        != PaymentMethod.MOCK
+                        || payment.getMethod() != method
                         || payment.getStatus()
                         != PaymentStatus.SUCCEEDED
         ) {

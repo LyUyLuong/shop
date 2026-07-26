@@ -10,8 +10,9 @@ public enum PaymentErrorCode implements ErrorCode {
     PAYMENT_NOT_FOUND("PAYMENT_004", "Payment was not found", 404),
     INVALID_IDEMPOTENCY_KEY("PAYMENT_005", "Idempotency key is invalid", 400),
     IDEMPOTENCY_KEY_REUSED("PAYMENT_006", "Idempotency key was reused for a different payment request", 409),
-    PAYMENT_IDEMPOTENCY_STATE_INVALID("PAYMENT_007", "Payment idempotency state is invalid",500);
-
+    PAYMENT_IDEMPOTENCY_STATE_INVALID("PAYMENT_007", "Payment idempotency state is invalid",500),
+    PAYMENT_PROVIDER_UNAVAILABLE("PAYMENT_008", "Payment provider is unavailable", 503),
+    PAYMENT_PROVIDER_REJECTED("PAYMENT_009", "Payment was rejected by provider", 422);
 
     private final String code;
     private final String message;
