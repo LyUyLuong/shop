@@ -5,6 +5,9 @@ import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.application.dto.PaymentResult;
 import com.lul.shop.payment.application.port.PayableOrderClient;
 import com.lul.shop.payment.application.port.PayableOrderTransitionSnapshot;
+import com.lul.shop.payment.application.port.PaymentProvider;
+import com.lul.shop.payment.application.port.PaymentProviderRequest;
+import com.lul.shop.payment.application.port.PaymentProviderResult;
 import com.lul.shop.payment.domain.Payment;
 import com.lul.shop.payment.domain.PaymentMethod;
 import com.lul.shop.payment.domain.PaymentRepository;
@@ -23,6 +26,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -69,6 +73,12 @@ class PaymentServiceTest {
     private final PaymentIdempotencyService idempotencyService =
             mock(PaymentIdempotencyService.class);
 
+    private final PaymentProviderRegistry providerRegistry =
+            mock(PaymentProviderRegistry.class);
+
+    private final PaymentProvider paymentProvider =
+            mock(PaymentProvider.class);
+
     private final OutboxService outboxService =
             mock(OutboxService.class);
 
@@ -80,6 +90,7 @@ class PaymentServiceTest {
                     paymentRepository,
                     payableOrderClient,
                     idempotencyService,
+                    providerRegistry,
                     outboxService,
                     clock
             );
@@ -102,6 +113,15 @@ class PaymentServiceTest {
         )).thenReturn(transition(
                 PayableOrderTransitionSnapshot.Outcome.NEWLY_PAID
         ));
+
+        when(providerRegistry.resolve(PaymentMethod.MOCK))
+                .thenReturn(paymentProvider);
+
+        when(paymentProvider.process(
+                any(PaymentProviderRequest.class)
+        )).thenReturn(
+                PaymentProviderResult.succeeded(PAID_AT)
+        );
 
         when(paymentRepository.save(any(Payment.class)))
                 .thenAnswer(invocation ->
@@ -144,6 +164,18 @@ class PaymentServiceTest {
         );
         verify(paymentRepository, never())
                 .findByOrderId(any(UUID.class));
+
+        verify(providerRegistry).resolve(PaymentMethod.MOCK);
+
+        verify(paymentProvider).process(argThat(request ->
+                request.paymentId() != null
+                        && request.orderId().equals(ORDER_ID)
+                        && request.userId().equals(USER_ID)
+                        && request.amount()
+                        .compareTo(AMOUNT) == 0
+                        && request.requestedAt()
+                        .equals(PAID_AT)
+        ));
     }
 
     @Test
@@ -177,6 +209,9 @@ class PaymentServiceTest {
                 .save(any(Payment.class));
         verify(idempotencyService, never())
                 .complete(any(UUID.class), any(UUID.class));
+
+        verifyNoInteractions(providerRegistry);
+        verifyNoInteractions(paymentProvider);
     }
 
     @Test
@@ -215,6 +250,9 @@ class PaymentServiceTest {
                 CLAIM_ID,
                 PAYMENT_ID
         );
+
+        verifyNoInteractions(providerRegistry);
+        verifyNoInteractions(paymentProvider);
     }
 
     @Test
@@ -253,6 +291,63 @@ class PaymentServiceTest {
                                         .PAYMENT_IDEMPOTENCY_STATE_INVALID
                         )
                 );
+
+        verify(paymentRepository, never())
+                .save(any(Payment.class));
+        verifyNoInteractions(outboxService);
+        verify(idempotencyService, never())
+                .complete(any(UUID.class), any(UUID.class));
+
+        verifyNoInteractions(providerRegistry);
+        verifyNoInteractions(paymentProvider);
+    }
+
+    @Test
+    void shouldStopPaymentWhenProviderRejectsRequest() {
+        when(idempotencyService.begin(
+                USER_ID,
+                ORDER_ID,
+                IDEMPOTENCY_KEY
+        )).thenReturn(
+                PaymentIdempotencyService.Decision.owner(
+                        CLAIM_ID
+                )
+        );
+
+        when(payableOrderClient.transitionToPaid(
+                USER_ID,
+                ORDER_ID
+        )).thenReturn(transition(
+                PayableOrderTransitionSnapshot
+                        .Outcome.NEWLY_PAID
+        ));
+
+        when(providerRegistry.resolve(PaymentMethod.MOCK))
+                .thenReturn(paymentProvider);
+
+        when(paymentProvider.process(
+                any(PaymentProviderRequest.class)
+        )).thenReturn(
+                PaymentProviderResult.rejected(
+                        "payment declined"
+                )
+        );
+
+        assertThatThrownBy(() -> service.payMock(command()))
+                .isInstanceOfSatisfying(
+                        BusinessException.class,
+                        exception -> assertThat(
+                                exception.getErrorCode()
+                        ).isEqualTo(
+                                PaymentErrorCode
+                                        .PAYMENT_PROVIDER_REJECTED
+                        )
+                );
+
+        verify(providerRegistry).resolve(PaymentMethod.MOCK);
+        verify(paymentProvider).process(
+                any(PaymentProviderRequest.class)
+        );
 
         verify(paymentRepository, never())
                 .save(any(Payment.class));

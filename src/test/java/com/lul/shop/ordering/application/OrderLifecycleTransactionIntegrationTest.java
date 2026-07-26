@@ -9,7 +9,10 @@ import com.lul.shop.outbox.application.OutboxService;
 import com.lul.shop.payment.application.PaymentService;
 import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.application.dto.PaymentResult;
+import com.lul.shop.payment.application.port.PaymentProviderRequest;
+import com.lul.shop.payment.application.port.PaymentProviderResult;
 import com.lul.shop.payment.domain.PaymentStatus;
+import com.lul.shop.payment.infrastructure.provider.MockPaymentProvider;
 import com.lul.shop.shared.test.PostgresIntegrationTest;
 import com.lul.shop.payment.application.PaymentErrorCode;
 import com.lul.shop.payment.domain.PaymentIdempotencyRepository;
@@ -37,8 +40,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 
 class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
 
@@ -67,6 +72,9 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
 
     @MockitoSpyBean
     private PaymentIdempotencyRepository paymentIdempotencyRepository;
+
+    @MockitoSpyBean
+    private MockPaymentProvider mockPaymentProvider;
 
     private PaymentIdempotencyRepository
             paymentIdempotencyRepositorySpy;
@@ -318,6 +326,46 @@ class OrderLifecycleTransactionIntegrationTest extends PostgresIntegrationTest {
         assertThat(historyCount(fixture.orderId())).isZero();
         assertThat(outboxCount(fixture.orderId())).isZero();
         assertThat(paymentIdempotencyCount(fixture)).isZero();
+    }
+
+    @Test
+    void shouldRollbackPaymentWorkWhenProviderRejects() {
+        Fixture fixture = seedPendingOrder(false);
+
+        doReturn(
+                PaymentProviderResult.rejected(
+                        "forced provider rejection"
+                )
+        ).when(mockPaymentProvider).process(
+                any(PaymentProviderRequest.class)
+        );
+
+        assertThatThrownBy(() -> paymentService.payMock(
+                new PayOrderCommand(
+                        fixture.ownerId(),
+                        fixture.orderId(),
+                        paymentIdempotencyKey(fixture)
+                )
+        )).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(
+                        exception.getErrorCode()
+                ).isEqualTo(
+                        PaymentErrorCode
+                                .PAYMENT_PROVIDER_REJECTED
+                )
+        );
+
+        assertUnchangedPendingOrder(fixture);
+
+        assertThat(paymentCount(fixture.orderId()))
+                .isZero();
+        assertThat(historyCount(fixture.orderId()))
+                .isZero();
+        assertThat(outboxCount(fixture.orderId()))
+                .isZero();
+        assertThat(paymentIdempotencyCount(fixture))
+                .isZero();
     }
 
     private PaymentIdempotencyState loadPaymentIdempotency(

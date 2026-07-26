@@ -19,6 +19,7 @@ import com.lul.shop.ordering.domain.OrderStatus;
 import com.lul.shop.ordering.presentation.AdminOrderController;
 import com.lul.shop.ordering.presentation.OrderItemImageUrlResolver;
 import com.lul.shop.ordering.presentation.OrderingController;
+import com.lul.shop.payment.presentation.MockPaymentController;
 import com.lul.shop.shared.config.CorsConfig;
 import com.lul.shop.shared.config.CorsProperties;
 import com.lul.shop.shared.config.WebConfig;
@@ -73,7 +74,8 @@ import static org.hamcrest.Matchers.containsString;
         CatalogController.class,
         OrderingController.class,
         AdminOrderController.class,
-        PaymentController.class
+        PaymentController.class,
+        MockPaymentController.class
 })
 @Import({
         WebConfig.class,
