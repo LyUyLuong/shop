@@ -335,6 +335,25 @@ public class Order {
         return previousStatus;
     }
 
+    public OrderStatus completeCodCollection() {
+        if (paymentMode != OrderPaymentMode.COD) {
+            throw new IllegalStateException(
+                    "only COD orders can be completed by collection"
+            );
+        }
+
+        if (status != OrderStatus.SHIPPED) {
+            throw new IllegalStateException(
+                    "COD collection requires a SHIPPED order"
+            );
+        }
+
+        OrderStatus previousStatus = status;
+        status = OrderStatus.COMPLETED;
+
+        return previousStatus;
+    }
+
     public boolean canMoveTo(OrderStatus targetStatus) {
         Objects.requireNonNull(targetStatus, "targetStatus must not be null");
 

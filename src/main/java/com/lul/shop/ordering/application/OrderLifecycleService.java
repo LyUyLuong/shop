@@ -1,14 +1,11 @@
 package com.lul.shop.ordering.application;
 
 import com.lul.shop.ordering.application.dto.ChangeOrderStatusCommand;
+import com.lul.shop.ordering.application.dto.OrderCodCollectionTransitionResult;
 import com.lul.shop.ordering.application.dto.OrderPaymentTransitionResult;
 import com.lul.shop.ordering.application.port.OrderInventoryClient;
-import com.lul.shop.ordering.domain.Order;
-import com.lul.shop.ordering.domain.OrderItem;
-import com.lul.shop.ordering.domain.OrderRepository;
-import com.lul.shop.ordering.domain.OrderStatus;
-import com.lul.shop.ordering.domain.OrderStatusHistory;
-import com.lul.shop.ordering.domain.OrderStatusHistoryRepository;
+
+import com.lul.shop.ordering.domain.*;
 import com.lul.shop.shared.exception.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +31,9 @@ public class OrderLifecycleService {
 
     private static final String SYSTEM_EXPIRY_HISTORY_REASON =
             "Payment deadline expired";
+
+    private static final String COD_COLLECTION_HISTORY_REASON =
+            "Cash on delivery collected";
 
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository historyRepository;
@@ -210,6 +210,69 @@ public class OrderLifecycleService {
         );
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public OrderCodCollectionTransitionResult collectCodByAdmin(
+            UUID adminUserId,
+            UUID orderId
+    ) {
+        Objects.requireNonNull(adminUserId, "adminUserId must not be null");
+        Objects.requireNonNull(orderId, "orderId must not be null");
+
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new BusinessException(
+                        OrderingErrorCode.ORDER_NOT_FOUND
+                ));
+
+        if (order.getPaymentMode() != OrderPaymentMode.COD) {
+            throw new BusinessException(
+                    OrderingErrorCode.COD_COLLECTION_NOT_ALLOWED
+            );
+        }
+
+        if (order.getStatus() == OrderStatus.COMPLETED) {
+            return toCodCollectionResult(
+                    order,
+                    OrderCodCollectionTransitionResult
+                            .Outcome.ALREADY_COLLECTED
+            );
+        }
+
+        if (order.getStatus() != OrderStatus.SHIPPED) {
+            throw new BusinessException(
+                    OrderingErrorCode.COD_COLLECTION_NOT_ALLOWED
+            );
+        }
+
+        OrderStatus fromStatus = order.completeCodCollection();
+        Order savedOrder = orderRepository.save(order);
+
+        historyRepository.save(
+                OrderStatusHistory.recordAdminChange(
+                        savedOrder.getId(),
+                        adminUserId,
+                        fromStatus,
+                        savedOrder.getStatus(),
+                        COD_COLLECTION_HISTORY_REASON
+                )
+        );
+
+        log.info(
+                "action=order.cod_collected orderId={} adminUserId={} "
+                        + "fromStatus={} toStatus={} outcome={} result=success",
+                savedOrder.getId(),
+                adminUserId,
+                fromStatus,
+                savedOrder.getStatus(),
+                OrderCodCollectionTransitionResult.Outcome.NEWLY_COLLECTED
+        );
+
+        return toCodCollectionResult(
+                savedOrder,
+                OrderCodCollectionTransitionResult
+                        .Outcome.NEWLY_COLLECTED
+        );
+    }
+
     @Transactional
     public Order expireBySystem(UUID orderId) {
         Objects.requireNonNull(orderId, "orderId must not be null");
@@ -281,6 +344,18 @@ public class OrderLifecycleService {
         );
 
         return savedOrder;
+    }
+
+    private OrderCodCollectionTransitionResult toCodCollectionResult(
+            Order order,
+            OrderCodCollectionTransitionResult.Outcome outcome
+    ) {
+        return new OrderCodCollectionTransitionResult(
+                order.getId(),
+                order.getUserId(),
+                order.getTotalAmount(),
+                outcome
+        );
     }
 
     private OrderPaymentTransitionResult toPaymentTransitionResult(
