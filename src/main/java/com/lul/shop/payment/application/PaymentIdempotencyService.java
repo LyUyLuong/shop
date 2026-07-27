@@ -40,17 +40,44 @@ public class PaymentIdempotencyService {
             UUID orderId,
             String idempotencyKey
     ) {
-        Objects.requireNonNull(userId, "userId must not be null");
-        Objects.requireNonNull(orderId, "orderId must not be null");
+        return begin(
+                userId,
+                orderId,
+                PaymentIdempotencyOperation.MOCK_PAYMENT,
+                idempotencyKey
+        );
+    }
+
+    @Transactional(propagation = Propagation.MANDATORY)
+    public Decision begin(
+            UUID principalUserId,
+            UUID orderId,
+            PaymentIdempotencyOperation operation,
+            String idempotencyKey
+    ) {
+        Objects.requireNonNull(
+                principalUserId,
+                "principalUserId must not be null"
+        );
+        Objects.requireNonNull(
+                orderId,
+                "orderId must not be null"
+        );
+        Objects.requireNonNull(
+                operation,
+                "operation must not be null"
+        );
 
         validateKey(idempotencyKey);
 
-        String fingerprint = fingerprint(orderId);
+        String fingerprint =
+                fingerprint(operation, orderId);
+
         Instant now = clock.instant();
 
         PaymentIdempotencyRecord candidate =
                 PaymentIdempotencyRecord.processing(
-                        userId,
+                        principalUserId,
                         idempotencyKey,
                         fingerprint,
                         now
@@ -61,11 +88,16 @@ public class PaymentIdempotencyService {
         }
 
         PaymentIdempotencyRecord existing = repository
-                .findByUserIdAndKey(userId, idempotencyKey)
-                .orElseThrow(() -> new BusinessException(
-                        PaymentErrorCode
-                                .PAYMENT_IDEMPOTENCY_STATE_INVALID
-                ));
+                .findByUserIdAndKey(
+                        principalUserId,
+                        idempotencyKey
+                )
+                .orElseThrow(() ->
+                        new BusinessException(
+                                PaymentErrorCode
+                                        .PAYMENT_IDEMPOTENCY_STATE_INVALID
+                        )
+                );
 
         if (!existing.matchesFingerprint(fingerprint)) {
             throw new BusinessException(
@@ -84,9 +116,18 @@ public class PaymentIdempotencyService {
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
-    public void complete(UUID claimId, UUID paymentId) {
-        Objects.requireNonNull(claimId, "claimId must not be null");
-        Objects.requireNonNull(paymentId, "paymentId must not be null");
+    public void complete(
+            UUID claimId,
+            UUID paymentId
+    ) {
+        Objects.requireNonNull(
+                claimId,
+                "claimId must not be null"
+        );
+        Objects.requireNonNull(
+                paymentId,
+                "paymentId must not be null"
+        );
 
         boolean completed = repository.complete(
                 claimId,
@@ -103,11 +144,23 @@ public class PaymentIdempotencyService {
     }
 
     String fingerprint(UUID orderId) {
-        Objects.requireNonNull(orderId, "orderId must not be null");
+        return fingerprint(
+                PaymentIdempotencyOperation.MOCK_PAYMENT,
+                orderId
+        );
+    }
+
+    String fingerprint(
+            PaymentIdempotencyOperation operation,
+            UUID orderId
+    ) {
+        Objects.requireNonNull(
+                operation,
+                "operation must not be null"
+        );
 
         String canonicalRequest =
-                "PAYMENT_MOCK\n"
-                        + "orderId=" + orderId;
+                operation.canonicalRequest(orderId);
 
         try {
             MessageDigest digest =
@@ -145,8 +198,10 @@ public class PaymentIdempotencyService {
             UUID claimId,
             UUID replayPaymentId
     ) {
+
         public Decision {
-            if ((claimId == null) == (replayPaymentId == null)) {
+            if ((claimId == null)
+                    == (replayPaymentId == null)) {
                 throw new IllegalArgumentException(
                         "exactly one decision identifier is required"
                 );
