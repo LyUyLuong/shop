@@ -16,7 +16,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
+import org.springframework.context.annotation.Profile;
 
+@Profile({"dev", "test"})
 @RestController
 @RequestMapping("/payments")
 public class MockPaymentController {

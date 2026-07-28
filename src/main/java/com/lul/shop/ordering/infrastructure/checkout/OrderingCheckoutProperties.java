@@ -9,6 +9,7 @@ import java.util.Objects;
 @ConfigurationProperties(prefix = "app.ordering.checkout")
 public record OrderingCheckoutProperties(
         BigDecimal standardShippingFee,
+        boolean mockEnabled,
         boolean codEnabled
 ) {
     public OrderingCheckoutProperties {

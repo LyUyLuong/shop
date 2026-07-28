@@ -7,7 +7,9 @@ import com.lul.shop.payment.domain.PaymentMethod;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
+import org.springframework.context.annotation.Profile;
 
+@Profile({"dev", "test"})
 @Component
 public class MockPaymentProvider implements PaymentProvider {
 

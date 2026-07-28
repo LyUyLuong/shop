@@ -25,6 +25,7 @@ app:
   ordering:
     checkout:
       standard-shipping-fee: 30000.00
+      mock-enabled: true
       cod-enabled: true
 
     expiry:

@@ -16,6 +16,7 @@ class OrderingCheckoutPoliciesTest {
         OrderingCheckoutProperties properties =
                 new OrderingCheckoutProperties(
                         new BigDecimal("30000"),
+                        false,
                         false
                 );
 
@@ -28,29 +29,47 @@ class OrderingCheckoutPoliciesTest {
     }
 
     @Test
-    void shouldAlwaysAllowMockAndGateCodByConfiguration() {
+    void shouldGateMockAndCodIndependentlyByConfiguration() {
         ConfiguredCheckoutPaymentModePolicy disabledPolicy =
-                new ConfiguredCheckoutPaymentModePolicy(
-                        new OrderingCheckoutProperties(
-                                BigDecimal.ZERO,
-                                false
-                        )
-                );
+                paymentModePolicy(false, false);
+
+        ConfiguredCheckoutPaymentModePolicy mockOnlyPolicy =
+                paymentModePolicy(true, false);
+
+        ConfiguredCheckoutPaymentModePolicy codOnlyPolicy =
+                paymentModePolicy(false, true);
 
         ConfiguredCheckoutPaymentModePolicy enabledPolicy =
-                new ConfiguredCheckoutPaymentModePolicy(
-                        new OrderingCheckoutProperties(
-                                BigDecimal.ZERO,
-                                true
-                        )
-                );
+                paymentModePolicy(true, true);
 
         assertThat(disabledPolicy.isEnabled(
                 OrderPaymentMode.MOCK
-        )).isTrue();
+        )).isFalse();
+
         assertThat(disabledPolicy.isEnabled(
                 OrderPaymentMode.COD
         )).isFalse();
+
+        assertThat(mockOnlyPolicy.isEnabled(
+                OrderPaymentMode.MOCK
+        )).isTrue();
+
+        assertThat(mockOnlyPolicy.isEnabled(
+                OrderPaymentMode.COD
+        )).isFalse();
+
+        assertThat(codOnlyPolicy.isEnabled(
+                OrderPaymentMode.MOCK
+        )).isFalse();
+
+        assertThat(codOnlyPolicy.isEnabled(
+                OrderPaymentMode.COD
+        )).isTrue();
+
+        assertThat(enabledPolicy.isEnabled(
+                OrderPaymentMode.MOCK
+        )).isTrue();
+
         assertThat(enabledPolicy.isEnabled(
                 OrderPaymentMode.COD
         )).isTrue();
@@ -61,10 +80,27 @@ class OrderingCheckoutPoliciesTest {
         assertThatThrownBy(() ->
                 new OrderingCheckoutProperties(
                         new BigDecimal("-0.01"),
+                        false,
                         false
                 )
         )
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("shippingFee must be >= 0");
+    }
+
+    private ConfiguredCheckoutPaymentModePolicy paymentModePolicy(
+            boolean mockEnabled,
+            boolean codEnabled
+    ) {
+        OrderingCheckoutProperties properties =
+                new OrderingCheckoutProperties(
+                        BigDecimal.ZERO,
+                        mockEnabled,
+                        codEnabled
+                );
+
+        return new ConfiguredCheckoutPaymentModePolicy(
+                properties
+        );
     }
 }
