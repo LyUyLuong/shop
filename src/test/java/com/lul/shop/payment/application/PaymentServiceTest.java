@@ -3,11 +3,7 @@ package com.lul.shop.payment.application;
 import com.lul.shop.outbox.application.OutboxService;
 import com.lul.shop.payment.application.dto.PayOrderCommand;
 import com.lul.shop.payment.application.dto.PaymentResult;
-import com.lul.shop.payment.application.port.PayableOrderClient;
-import com.lul.shop.payment.application.port.PayableOrderTransitionSnapshot;
-import com.lul.shop.payment.application.port.PaymentProvider;
-import com.lul.shop.payment.application.port.PaymentProviderRequest;
-import com.lul.shop.payment.application.port.PaymentProviderResult;
+import com.lul.shop.payment.application.port.*;
 import com.lul.shop.payment.domain.Payment;
 import com.lul.shop.payment.domain.PaymentMethod;
 import com.lul.shop.payment.domain.PaymentRepository;
@@ -70,6 +66,9 @@ class PaymentServiceTest {
     private final PayableOrderClient payableOrderClient =
             mock(PayableOrderClient.class);
 
+    private final CodCollectionOrderClient codCollectionOrderClient =
+            mock(CodCollectionOrderClient.class);
+
     private final PaymentIdempotencyService idempotencyService =
             mock(PaymentIdempotencyService.class);
 
@@ -89,6 +88,7 @@ class PaymentServiceTest {
             new PaymentService(
                     paymentRepository,
                     payableOrderClient,
+                    codCollectionOrderClient,
                     idempotencyService,
                     providerRegistry,
                     outboxService,

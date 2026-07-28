@@ -28,6 +28,11 @@ import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.GlobalExceptionHandler;
 import com.lul.shop.payment.application.PaymentService;
 import com.lul.shop.payment.presentation.PaymentController;
+import com.lul.shop.payment.application.dto.CollectCodCommand;
+import com.lul.shop.payment.application.dto.PaymentResult;
+import com.lul.shop.payment.domain.PaymentMethod;
+import com.lul.shop.payment.domain.PaymentStatus;
+import com.lul.shop.payment.presentation.AdminCodCollectionController;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -75,7 +80,8 @@ import static org.hamcrest.Matchers.containsString;
         OrderingController.class,
         AdminOrderController.class,
         PaymentController.class,
-        MockPaymentController.class
+        MockPaymentController.class,
+        AdminCodCollectionController.class
 })
 @Import({
         WebConfig.class,
@@ -118,6 +124,15 @@ class SecurityAccessMatrixTest {
 
     private static final String ORDER_IDEMPOTENCY_KEY =
             "checkout-request-001";
+
+    private static final UUID PAYMENT_ID =
+            UUID.fromString("55555555-5555-4555-8555-555555555555");
+
+    private static final UUID CUSTOMER_ID =
+            UUID.fromString("66666666-6666-4666-8666-666666666666");
+
+    private static final String COD_COLLECTION_KEY =
+            "cod-collection-001";
 
     @Autowired
     private MockMvc mockMvc;
@@ -484,7 +499,8 @@ class SecurityAccessMatrixTest {
                         "getOrder",
                         "getOrderItemImage",
                         "getStatusHistory",
-                        "changeStatus"
+                        "changeStatus",
+                        "collectCod"
                 );
 
         assertThat(adminHandlers).allSatisfy(method -> {
@@ -636,6 +652,119 @@ class SecurityAccessMatrixTest {
     }
 
 
+    @Test
+    void shouldRejectUserFromCodCollectionAdminRoute()
+            throws Exception {
+
+        mockMvc.perform(post(
+                        "/api/v1/admin/orders/{orderId}/cod-collection",
+                        ORDER_ID
+                )
+                        .header(
+                                "Idempotency-Key",
+                                COD_COLLECTION_KEY
+                        )
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(
+                                        USER_ID.toString()
+                                ))
+                                .authorities(USER_AUTHORITY)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_003"));
+
+        verifyNoInteractions(paymentService);
+    }
+
+    @Test
+    void shouldRejectCodCollectionWithoutIdempotencyKey()
+            throws Exception {
+
+        mockMvc.perform(post(
+                        "/api/v1/admin/orders/{orderId}/cod-collection",
+                        ORDER_ID
+                )
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(
+                                        USER_ID.toString()
+                                ))
+                                .authorities(ADMIN_AUTHORITY)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("COMMON_005"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(
+                                "Missing required header " +
+                                        "'Idempotency-Key'"
+                        ));
+
+        verifyNoInteractions(paymentService);
+    }
+
+    @Test
+    void shouldAllowAdminToCollectCodPayment()
+            throws Exception {
+
+        Instant paidAt =
+                Instant.parse("2026-07-28T01:00:00Z");
+
+        PaymentResult result = new PaymentResult(
+                PAYMENT_ID,
+                ORDER_ID,
+                CUSTOMER_ID,
+                PaymentMethod.COD,
+                PaymentStatus.SUCCEEDED,
+                new BigDecimal("230000.00"),
+                paidAt,
+                null,
+                paidAt,
+                paidAt
+        );
+
+        CollectCodCommand expectedCommand =
+                new CollectCodCommand(
+                        USER_ID,
+                        ORDER_ID,
+                        COD_COLLECTION_KEY
+                );
+
+        when(paymentService.collectCod(expectedCommand))
+                .thenReturn(result);
+
+        mockMvc.perform(post(
+                        "/api/v1/admin/orders/{orderId}/cod-collection",
+                        ORDER_ID
+                )
+                        .header(
+                                "Idempotency-Key",
+                                COD_COLLECTION_KEY
+                        )
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(
+                                        USER_ID.toString()
+                                ))
+                                .authorities(ADMIN_AUTHORITY)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id")
+                        .value(PAYMENT_ID.toString()))
+                .andExpect(jsonPath("$.data.orderId")
+                        .value(ORDER_ID.toString()))
+                .andExpect(jsonPath("$.data.method")
+                        .value("COD"))
+                .andExpect(jsonPath("$.data.status")
+                        .value("SUCCEEDED"))
+                .andExpect(jsonPath("$.data.amount")
+                        .value(230000.00))
+                .andExpect(jsonPath("$.data.paidAt")
+                        .value(paidAt.toString()))
+                .andExpect(jsonPath("$.data.failureReason")
+                        .doesNotExist());
+
+        verify(paymentService).collectCod(expectedCommand);
+    }
 
     @Test
     void shouldRejectMockPaymentWithoutIdempotencyKey()
@@ -691,6 +820,12 @@ class SecurityAccessMatrixTest {
                 Arguments.of(
                         HttpMethod.GET,
                         "/api/v1/orders/page"
+                ),
+                Arguments.of(
+                        HttpMethod.POST,
+                        "/api/v1/admin/orders/"
+                                + ORDER_ID
+                                + "/cod-collection"
                 )
         );
     }
