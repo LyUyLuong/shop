@@ -1,10 +1,13 @@
 package com.lul.shop.cart.infrastructure.persistence.repository;
 
+import com.lul.shop.cart.application.CartErrorCode;
 import com.lul.shop.cart.domain.Cart;
 import com.lul.shop.cart.domain.CartRepository;
 import com.lul.shop.cart.infrastructure.persistence.entity.CartJpaEntity;
 import com.lul.shop.cart.infrastructure.persistence.mapper.CartMapper;
+import com.lul.shop.shared.exception.BusinessException;
 import jakarta.persistence.EntityManager;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,6 +49,18 @@ public class CartRepositoryImpl implements CartRepository {
             propagation = Propagation.MANDATORY,
             readOnly = false
     )
+    public void lockCreationByUserId(UUID userId) {
+        cartJpaRepository.lockCartOwnerById(userId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Cart owner was not found"
+                ));
+    }
+
+    @Override
+    @Transactional(
+            propagation = Propagation.MANDATORY,
+            readOnly = false
+    )
     public Optional<Cart> findByIdAndUserIdForUpdate(
             UUID cartId,
             UUID userId
@@ -70,10 +85,16 @@ public class CartRepositoryImpl implements CartRepository {
 
         entity.setUpdatedAt(nextMutationTime(cart));
 
-        CartJpaEntity savedEntity =
-                cartJpaRepository.saveAndFlush(entity);
+        try {
+            CartJpaEntity savedEntity =
+                    cartJpaRepository.saveAndFlush(entity);
 
-        return cartMapper.toDomain(savedEntity);
+            return cartMapper.toDomain(savedEntity);
+        } catch (OptimisticLockingFailureException exception) {
+            throw new BusinessException(
+                    CartErrorCode.CART_VERSION_CONFLICT
+            );
+        }
     }
 
     private UUID detachLockedCart(CartJpaEntity lockedCart) {

@@ -7,6 +7,8 @@ public interface CartRepository {
 
     Optional<Cart> findByUserId(UUID userId);
 
+    void lockCreationByUserId(UUID userId);
+
     Optional<Cart> findByIdAndUserIdForUpdate(
             UUID cartId,
             UUID userId

@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -34,7 +35,7 @@ public class CartService {
     public CartResult getCart(UUID userId) {
         Objects.requireNonNull(userId, "userId must not be null");
 
-        Cart cart = cartRepository.findByUserId(userId)
+        Cart cart = findCartAfterSerializingCreation(userId)
                 .orElseGet(() -> cartRepository.save(Cart.create(userId)));
 
         return toResult(cart);
@@ -46,7 +47,7 @@ public class CartService {
 
         ProductAvailabilitySnapshot product = getAvailableProductOrThrow(command.productId());
 
-        Cart cart = cartRepository.findByUserId(command.userId())
+        Cart cart = findCartAfterSerializingCreation(command.userId())
                 .orElseGet(() -> Cart.create(command.userId()));
 
         ensureStockIsEnoughAfterAdd(
@@ -159,6 +160,21 @@ public class CartService {
         return new BusinessException(
                 CartErrorCode.CART_CHECKOUT_CONFLICT
         );
+    }
+
+    private Optional<Cart> findCartAfterSerializingCreation(
+            UUID userId
+    ) {
+        Optional<Cart> existingCart =
+                cartRepository.findByUserId(userId);
+
+        if (existingCart.isPresent()) {
+            return existingCart;
+        }
+
+        cartRepository.lockCreationByUserId(userId);
+
+        return cartRepository.findByUserId(userId);
     }
 
     private Cart getExistingCartOrThrow(UUID userId) {

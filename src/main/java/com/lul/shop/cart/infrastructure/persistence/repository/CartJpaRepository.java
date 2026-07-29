@@ -17,6 +17,19 @@ public interface CartJpaRepository
     @EntityGraph(attributePaths = "items")
     Optional<CartJpaEntity> findByUserId(UUID userId);
 
+    @Query(
+            value = """
+                    select id
+                    from users
+                    where id = :userId
+                    for update
+                    """,
+            nativeQuery = true
+    )
+    Optional<UUID> lockCartOwnerById(
+            @Param("userId") UUID userId
+    );
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
             select cartEntity
