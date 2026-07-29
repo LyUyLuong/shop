@@ -25,7 +25,9 @@ public class ConfiguredCheckoutPaymentModePolicy
                 "paymentMode must not be null"
         );
 
-        return paymentMode == OrderPaymentMode.MOCK
-                || properties.codEnabled();
+        return switch (paymentMode) {
+            case MOCK -> properties.mockEnabled();
+            case COD -> properties.codEnabled();
+        };
     }
 }

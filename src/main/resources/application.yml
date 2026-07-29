@@ -79,6 +79,7 @@ app:
   ordering:
     checkout:
       standard-shipping-fee: ${ORDER_STANDARD_SHIPPING_FEE:0.00}
+      mock-enabled: false
       cod-enabled: ${ORDER_COD_ENABLED:false}
     expiry:
       enabled: ${ORDER_EXPIRY_ENABLED:false}

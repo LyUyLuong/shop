@@ -30,3 +30,7 @@ app:
     region: ${AWS_REGION}
     access-key: ${AWS_ACCESS_KEY:}
     secret-key: ${AWS_SECRET_KEY:}
+
+  ordering:
+    checkout:
+      mock-enabled: false
