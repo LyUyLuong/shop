@@ -2,12 +2,13 @@ package com.lul.shop.cart.infrastructure.persistence.repository;
 
 import com.lul.shop.cart.domain.Cart;
 import com.lul.shop.cart.domain.CartRepository;
+import com.lul.shop.cart.application.CartErrorCode;
+import com.lul.shop.shared.exception.BusinessException;
 import com.lul.shop.shared.test.PostgresIntegrationTest;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -124,7 +125,14 @@ class CartRepositoryImplTest extends PostgresIntegrationTest {
 
         assertThatThrownBy(
                 () -> cartRepository.save(staleSnapshot)
-        ).isInstanceOf(OptimisticLockingFailureException.class);
+        ).isInstanceOfSatisfying(
+                BusinessException.class,
+                exception -> assertThat(
+                        exception.getErrorCode()
+                ).isEqualTo(
+                        CartErrorCode.CART_VERSION_CONFLICT
+                )
+        );
     }
 
     private Cart saveCartWithItem(int quantity) {

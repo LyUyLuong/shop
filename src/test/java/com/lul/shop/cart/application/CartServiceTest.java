@@ -37,7 +37,33 @@ public class CartServiceTest {
         assertThat(result.items()).isEmpty();
         assertThat(cartRepository.savedCarts).hasSize(1);
         assertThat(result.version()).isZero();
+        assertThat(cartRepository.creationLockUserIds)
+                .containsExactly(USER_ID);
 
+    }
+
+
+    @Test
+    void shouldReuseCartCreatedWhileWaitingForCreationLock() {
+        FakeCartRepository cartRepository =
+                new FakeCartRepository();
+        cartRepository.givenCartCreatedWhenCreationLocked(
+                existingCartWithItem(2)
+        );
+
+        CartService service = new CartService(
+                cartRepository,
+                new FakeProductAvailabilityClient()
+        );
+
+        CartResult result = service.getCart(USER_ID);
+
+        assertThat(result.id()).isEqualTo(CART_ID);
+        assertThat(result.version()).isEqualTo(7L);
+        assertThat(result.items()).hasSize(1);
+        assertThat(cartRepository.savedCarts).isEmpty();
+        assertThat(cartRepository.creationLockUserIds)
+                .containsExactly(USER_ID);
     }
 
 
@@ -58,6 +84,8 @@ public class CartServiceTest {
 
         assertThat(cartRepository.savedCarts).hasSize(1);
         assertThat(productClient.lookupCalls).containsExactly(PRODUCT_ID);
+        assertThat(cartRepository.creationLockUserIds)
+                .containsExactly(USER_ID);
 
     }
 
@@ -235,15 +263,36 @@ public class CartServiceTest {
 
         private final Map<UUID, Cart> cartsByUserId = new LinkedHashMap<>();
         private final List<Cart> savedCarts = new ArrayList<>();
+        private final List<UUID> creationLockUserIds =
+                new ArrayList<>();
+        private Cart cartCreatedWhenCreationLocked;
 
         private void givenCart(Cart cart) {
             cartsByUserId.put(cart.getUserId(), cart);
+        }
+
+        private void givenCartCreatedWhenCreationLocked(
+                Cart cart
+        ) {
+            cartCreatedWhenCreationLocked = cart;
         }
 
 
         @Override
         public Optional<Cart> findByUserId(UUID userId) {
             return Optional.ofNullable(cartsByUserId.get(userId));
+        }
+
+        @Override
+        public void lockCreationByUserId(UUID userId) {
+            creationLockUserIds.add(userId);
+
+            if (cartCreatedWhenCreationLocked != null) {
+                cartsByUserId.put(
+                        userId,
+                        cartCreatedWhenCreationLocked
+                );
+            }
         }
 
         @Override
