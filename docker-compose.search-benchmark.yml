@@ -1,0 +1,37 @@
+name: shop-product-search-benchmark
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: shop_search_benchmark
+      POSTGRES_USER: shop_benchmark
+      POSTGRES_PASSWORD: shop_benchmark
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - product-search-postgres-data:/var/lib/postgresql/data
+      - ./src/test/resources/benchmark/product-search:/benchmark:ro
+    healthcheck:
+      test: pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  flyway:
+    image: flyway/flyway:11.7.2-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./src/main/resources/db/migration:/flyway/sql:ro
+    command: >-
+      -url=jdbc:postgresql://postgres:5432/shop_search_benchmark
+      -user=shop_benchmark
+      -password=shop_benchmark
+      -locations=filesystem:/flyway/sql
+      -connectRetries=60
+      migrate
+
+volumes:
+  product-search-postgres-data:
