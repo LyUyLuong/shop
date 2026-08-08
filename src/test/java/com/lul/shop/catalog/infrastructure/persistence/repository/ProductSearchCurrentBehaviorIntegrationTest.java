@@ -3,6 +3,7 @@ package com.lul.shop.catalog.infrastructure.persistence.repository;
 import com.lul.shop.catalog.domain.Product;
 import com.lul.shop.catalog.domain.ProductRepository;
 import com.lul.shop.catalog.domain.ProductSearchCriteria;
+import com.lul.shop.catalog.domain.ProductStatus;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.test.PostgresIntegrationTest;
@@ -133,6 +134,79 @@ class ProductSearchCurrentBehaviorIntegrationTest
     }
 
     @Test
+    void shouldTreatBackslashAsOrdinaryCharacter() {
+        Product backslashName = saveActiveProduct(
+                "PSA-BACKSLASH-001",
+                "Cable \\ Organizer"
+        );
+        saveActiveProduct(
+                "PSA-BACKSLASH-002",
+                "Ordinary Cable Organizer"
+        );
+
+        flushAndClear();
+
+        assertProductIds(
+                searchActive("\\"),
+                backslashName
+        );
+    }
+
+    @Test
+    void shouldNotSearchProductDescription() {
+        saveActiveProduct(
+                "PSA-DESCRIPTION-001",
+                "Ordinary Product",
+                "Hidden Search Needle"
+        );
+
+        flushAndClear();
+
+        assertProductIds(
+                searchActive("Hidden Search Needle")
+        );
+    }
+
+    @Test
+    void shouldApplyOptionalStatusForAdminSearch() {
+        Product active = saveActiveProduct(
+                "PSA-ADMIN-ACTIVE",
+                "Admin Active Product"
+        );
+        Product inactive = saveInactiveProduct(
+                "PSA-ADMIN-INACTIVE",
+                "Admin Inactive Product"
+        );
+
+        flushAndClear();
+
+        assertProductIds(
+                search(ProductSearchCriteria.withStatus(
+                        "PSA-ADMIN",
+                        null
+                )),
+                active,
+                inactive
+        );
+
+        assertProductIds(
+                search(ProductSearchCriteria.withStatus(
+                        "PSA-ADMIN",
+                        ProductStatus.ACTIVE
+                )),
+                active
+        );
+
+        assertProductIds(
+                search(ProductSearchCriteria.withStatus(
+                        "PSA-ADMIN",
+                        ProductStatus.INACTIVE
+                )),
+                inactive
+        );
+    }
+
+    @Test
     void shouldMatchVietnameseCaseWithoutFoldingAccents() {
         Product vietnamese = saveActiveProduct(
                 "PSA-VIETNAMESE-001",
@@ -234,6 +308,70 @@ class ProductSearchCurrentBehaviorIntegrationTest
         assertThat(emptyPage.hasNext()).isFalse();
     }
 
+    @Test
+    void shouldExposeCreatedAtTieAcrossAdjacentPageBoundaries() {
+        Product first = saveActiveProduct(
+                "PSA-TIE-001",
+                "Tied Product One"
+        );
+        Product second = saveActiveProduct(
+                "PSA-TIE-002",
+                "Tied Product Two"
+        );
+        Product third = saveActiveProduct(
+                "PSA-TIE-003",
+                "Tied Product Three"
+        );
+        Product fourth = saveActiveProduct(
+                "PSA-TIE-004",
+                "Tied Product Four"
+        );
+        Product fifth = saveActiveProduct(
+                "PSA-TIE-005",
+                "Tied Product Five"
+        );
+
+        flushAndClear();
+
+        String tiedTimestamp = "2026-02-01T00:00:00Z";
+        Instant tiedAt = Instant.parse(tiedTimestamp);
+
+        updateCreatedAt(first, tiedTimestamp);
+        updateCreatedAt(second, tiedTimestamp);
+        updateCreatedAt(third, tiedTimestamp);
+        updateCreatedAt(fourth, tiedTimestamp);
+        updateCreatedAt(fifth, tiedTimestamp);
+
+        entityManager.clear();
+
+        PageResult<Product> firstPage =
+                searchActive("PSA-TIE", 0, 2);
+        PageResult<Product> secondPage =
+                searchActive("PSA-TIE", 1, 2);
+        PageResult<Product> lastPage =
+                searchActive("PSA-TIE", 2, 2);
+
+        assertThat(firstPage.content()).hasSize(2);
+        assertThat(secondPage.content()).hasSize(2);
+        assertThat(lastPage.content()).hasSize(1);
+
+        assertThat(firstPage.totalElements()).isEqualTo(5);
+        assertThat(firstPage.totalPages()).isEqualTo(3);
+        assertThat(firstPage.hasNext()).isTrue();
+        assertThat(secondPage.hasNext()).isTrue();
+        assertThat(lastPage.hasNext()).isFalse();
+
+        assertThat(firstPage.content())
+                .extracting(Product::getCreatedAt)
+                .containsOnly(tiedAt);
+        assertThat(secondPage.content())
+                .extracting(Product::getCreatedAt)
+                .containsOnly(tiedAt);
+        assertThat(lastPage.content())
+                .extracting(Product::getCreatedAt)
+                .containsOnly(tiedAt);
+    }
+
     private PageResult<Product> searchActive(String keyword) {
         return searchActive(keyword, 0, 20);
     }
@@ -249,28 +387,59 @@ class ProductSearchCurrentBehaviorIntegrationTest
         );
     }
 
+    private PageResult<Product> search(
+            ProductSearchCriteria criteria
+    ) {
+        return productRepository.search(
+                criteria,
+                new PageQuery(0, 20)
+        );
+    }
+
     private Product saveActiveProduct(
             String sku,
             String name
     ) {
-        return productRepository.save(newProduct(sku, name));
+        return saveActiveProduct(
+                sku,
+                name,
+                "PS-A current-query baseline fixture"
+        );
+    }
+
+    private Product saveActiveProduct(
+            String sku,
+            String name,
+            String description
+    ) {
+        return productRepository.save(
+                newProduct(sku, name, description)
+        );
     }
 
     private Product saveInactiveProduct(
             String sku,
             String name
     ) {
-        Product product = newProduct(sku, name);
+        Product product = newProduct(
+                sku,
+                name,
+                "PS-A current-query baseline fixture"
+        );
         product.deactivate();
 
         return productRepository.save(product);
     }
 
-    private Product newProduct(String sku, String name) {
+    private Product newProduct(
+            String sku,
+            String name,
+            String description
+    ) {
         return Product.create(
                 sku,
                 name,
-                "PS-A current-query baseline fixture",
+                description,
                 PRICE,
                 10
         );
