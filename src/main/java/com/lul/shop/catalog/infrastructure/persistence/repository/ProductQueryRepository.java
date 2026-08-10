@@ -28,7 +28,6 @@ public class ProductQueryRepository {
             ProductSearchCriteria criteria,
             PageQuery pageQuery
     ) {
-
         int page = pageQuery.page();
         int size = pageQuery.size();
 
@@ -135,7 +134,7 @@ public class ProductQueryRepository {
             Map<String, Object> params
     ) {
         if (criteria.keyword() == null) {
-            return "ORDER BY p.createdAt DESC\n";
+            return "ORDER BY p.createdAt DESC, p.id DESC\n";
         }
 
         params.put(
@@ -162,7 +161,8 @@ public class ProductQueryRepository {
                             THEN 1
                         ELSE 2
                     END ASC,
-                    p.createdAt DESC
+                    p.createdAt DESC,
+                    p.id DESC
                 """;
     }
 
