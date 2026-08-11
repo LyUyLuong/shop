@@ -400,7 +400,7 @@ WHERE database_catalog.datname = current_database();
     Write-Host "Evidence: $script:EvidenceFile"
     Write-Host (
         "The benchmark database remains running " +
-        "for the next PS-A step."
+        "for the next benchmark step."
     )
 }
 catch {

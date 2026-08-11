@@ -23,4 +23,9 @@ public interface ProductRepository {
     Product save(Product product);
 
     PageResult<Product> search(ProductSearchCriteria criteria, PageQuery pageQuery);
+
+    ProductSearchSlice<Product> search(
+            ProductSearchCriteria criteria,
+            ProductSearchWindow window
+    );
 }

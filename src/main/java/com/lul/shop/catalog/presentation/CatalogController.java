@@ -3,33 +3,34 @@ package com.lul.shop.catalog.presentation;
 import com.lul.shop.catalog.application.CatalogErrorCode;
 import com.lul.shop.catalog.application.CatalogService;
 import com.lul.shop.catalog.application.dto.CreateProductCommand;
+import com.lul.shop.catalog.application.dto.ProductCursorPageResult;
+import com.lul.shop.catalog.application.dto.ProductImageContent;
 import com.lul.shop.catalog.application.dto.ProductResult;
 import com.lul.shop.catalog.application.dto.UpdateProductCommand;
 import com.lul.shop.catalog.application.dto.UploadProductImageCommand;
+import com.lul.shop.catalog.domain.ProductSearchCriteria;
+import com.lul.shop.catalog.domain.ProductStatus;
 import com.lul.shop.catalog.presentation.dto.request.CreateProductRequest;
 import com.lul.shop.catalog.presentation.dto.request.UpdateProductRequest;
+import com.lul.shop.catalog.presentation.dto.response.ProductCursorPageResponse;
 import com.lul.shop.catalog.presentation.dto.response.ProductResponse;
 import com.lul.shop.shared.api.ApiResponse;
 import com.lul.shop.shared.api.PageResponse;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.BusinessException;
-import com.lul.shop.catalog.domain.ProductSearchCriteria;
-import com.lul.shop.catalog.domain.ProductStatus;
-import com.lul.shop.catalog.application.dto.ProductImageContent;
+import jakarta.validation.Valid;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.CacheControl;
-import org.springframework.http.ResponseEntity;
-
-import java.util.concurrent.TimeUnit;
-import jakarta.validation.Valid;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 public class CatalogController {
@@ -43,121 +44,273 @@ public class CatalogController {
     }
 
     @GetMapping("/products")
-    public ApiResponse<PageResponse<ProductResponse>> searchProducts(
-            @RequestParam(required = false) String keyword,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+    public ApiResponse<PageResponse<ProductResponse>>
+    searchProducts(
+            @RequestParam(required = false)
+            String keyword,
+            @RequestParam(defaultValue = "0")
+            int page,
+            @RequestParam(defaultValue = "20")
+            int size
     ) {
-        PageResult<ProductResponse> result = catalogService
-                .searchActiveProducts(keyword, toPageQuery(page, size))
-                .map(ProductResponse::from);
+        PageResult<ProductResponse> result =
+                catalogService
+                        .searchActiveProducts(
+                                keyword,
+                                toPageQuery(page, size)
+                        )
+                        .map(ProductResponse::from);
 
         return ApiResponse.ok(PageResponse.from(result));
     }
 
-    @GetMapping("/products/{productId}")
-    public ApiResponse<ProductResponse> getProduct(@PathVariable UUID productId) {
-        ProductResult result = catalogService.getActiveProduct(productId);
+    @GetMapping("/products/cursor")
+    public ApiResponse<ProductCursorPageResponse>
+    searchProductsByCursor(
+            @RequestParam(required = false)
+            String keyword,
+            @RequestParam(required = false)
+            String cursor,
+            @RequestParam(defaultValue = "20")
+            int size
+    ) {
+        ProductCursorPageResult result =
+                catalogService
+                        .searchActiveProductsByCursor(
+                                keyword,
+                                cursor,
+                                toCursorSize(size)
+                        );
 
-        return ApiResponse.ok(ProductResponse.from(result));
+        return ApiResponse.ok(
+                ProductCursorPageResponse.from(result)
+        );
+    }
+
+    @GetMapping("/products/{productId}")
+    public ApiResponse<ProductResponse> getProduct(
+            @PathVariable UUID productId
+    ) {
+        ProductResult result =
+                catalogService.getActiveProduct(productId);
+
+        return ApiResponse.ok(
+                ProductResponse.from(result)
+        );
     }
 
     @PostMapping("/admin/products")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<ProductResponse> createProduct(@Valid @RequestBody CreateProductRequest request) {
-        CreateProductCommand command = new CreateProductCommand(
-                request.sku(),
-                request.name(),
-                request.description(),
-                request.price(),
-                request.stockQuantity()
+    public ApiResponse<ProductResponse> createProduct(
+            @Valid @RequestBody
+            CreateProductRequest request
+    ) {
+        CreateProductCommand command =
+                new CreateProductCommand(
+                        request.sku(),
+                        request.name(),
+                        request.description(),
+                        request.price(),
+                        request.stockQuantity()
+                );
+
+        ProductResult result =
+                catalogService.createProduct(command);
+
+        return ApiResponse.ok(
+                ProductResponse.from(result)
         );
-
-        ProductResult result = catalogService.createProduct(command);
-
-        return ApiResponse.ok(ProductResponse.from(result));
     }
 
     @PutMapping("/admin/products/{productId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<ProductResponse> updateProduct(@PathVariable UUID productId,
-                                                      @Valid @RequestBody UpdateProductRequest request) {
-        UpdateProductCommand command = new UpdateProductCommand(
-                request.sku(),
-                request.name(),
-                request.description(),
-                request.price(),
-                request.stockQuantity(),
-                request.expectedVersion()
+    public ApiResponse<ProductResponse> updateProduct(
+            @PathVariable UUID productId,
+            @Valid @RequestBody
+            UpdateProductRequest request
+    ) {
+        UpdateProductCommand command =
+                new UpdateProductCommand(
+                        request.sku(),
+                        request.name(),
+                        request.description(),
+                        request.price(),
+                        request.stockQuantity(),
+                        request.expectedVersion()
+                );
+
+        ProductResult result =
+                catalogService.updateProduct(
+                        productId,
+                        command
+                );
+
+        return ApiResponse.ok(
+                ProductResponse.from(result)
         );
-
-        ProductResult result = catalogService.updateProduct(productId, command);
-
-        return ApiResponse.ok(ProductResponse.from(result));
     }
 
     @DeleteMapping("/admin/products/{productId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<Void> deactivateProduct(@PathVariable UUID productId) {
+    public ApiResponse<Void> deactivateProduct(
+            @PathVariable UUID productId
+    ) {
         catalogService.deactivateProduct(productId);
 
         return ApiResponse.ok();
     }
 
-    private PageQuery toPageQuery(int page, int size) {
-        return new PageQuery(page, Math.min(size, MAX_PAGE_SIZE));
-    }
-
-    @PostMapping(value = "/admin/products/{productId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(
+            value = "/admin/products/{productId}/image",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<ProductResponse> uploadProductImage(@PathVariable UUID productId,
-                                                           @RequestPart("file") MultipartFile file) {
-        UploadProductImageCommand command = toUploadProductImageCommand(file);
+    public ApiResponse<ProductResponse> uploadProductImage(
+            @PathVariable UUID productId,
+            @RequestPart("file") MultipartFile file
+    ) {
+        UploadProductImageCommand command =
+                toUploadProductImageCommand(file);
 
-        ProductResult result = catalogService.uploadProductImage(productId, command);
+        ProductResult result =
+                catalogService.uploadProductImage(
+                        productId,
+                        command
+                );
 
-        return ApiResponse.ok(ProductResponse.from(result));
+        return ApiResponse.ok(
+                ProductResponse.from(result)
+        );
     }
 
     @GetMapping("/admin/products")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<PageResponse<ProductResponse>> searchAdminProducts(
-            @RequestParam(required = false) String keyword,
-            @RequestParam(required = false) ProductStatus status,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+    public ApiResponse<PageResponse<ProductResponse>>
+    searchAdminProducts(
+            @RequestParam(required = false)
+            String keyword,
+            @RequestParam(required = false)
+            ProductStatus status,
+            @RequestParam(defaultValue = "0")
+            int page,
+            @RequestParam(defaultValue = "20")
+            int size
     ) {
-        ProductSearchCriteria criteria = ProductSearchCriteria.withStatus(keyword, status);
+        ProductSearchCriteria criteria =
+                ProductSearchCriteria.withStatus(
+                        keyword,
+                        status
+                );
 
-        PageResult<ProductResponse> result = catalogService
-                .searchProducts(criteria, toPageQuery(page, size))
-                .map(ProductResponse::from);
+        PageResult<ProductResponse> result =
+                catalogService
+                        .searchProducts(
+                                criteria,
+                                toPageQuery(page, size)
+                        )
+                        .map(ProductResponse::from);
 
         return ApiResponse.ok(PageResponse.from(result));
     }
 
+    @GetMapping("/admin/products/cursor")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResponse<ProductCursorPageResponse>
+    searchAdminProductsByCursor(
+            @RequestParam(required = false)
+            String keyword,
+            @RequestParam(required = false)
+            ProductStatus status,
+            @RequestParam(required = false)
+            String cursor,
+            @RequestParam(defaultValue = "20")
+            int size
+    ) {
+        ProductSearchCriteria criteria =
+                ProductSearchCriteria.withStatus(
+                        keyword,
+                        status
+                );
+
+        ProductCursorPageResult result =
+                catalogService.searchProductsByCursor(
+                        criteria,
+                        cursor,
+                        toCursorSize(size)
+                );
+
+        return ApiResponse.ok(
+                ProductCursorPageResponse.from(result)
+        );
+    }
+
     @GetMapping("/admin/products/{productId}")
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResponse<ProductResponse> getAdminProduct(@PathVariable UUID productId) {
-        ProductResult result = catalogService.getProduct(productId);
+    public ApiResponse<ProductResponse> getAdminProduct(
+            @PathVariable UUID productId
+    ) {
+        ProductResult result =
+                catalogService.getProduct(productId);
 
-        return ApiResponse.ok(ProductResponse.from(result));
+        return ApiResponse.ok(
+                ProductResponse.from(result)
+        );
     }
-
 
     @GetMapping("/products/{productId}/image")
-    public ResponseEntity<InputStreamResource> getProductImage(@PathVariable UUID productId) {
-        ProductImageContent image = catalogService.getProductImage(productId);
+    public ResponseEntity<InputStreamResource>
+    getProductImage(
+            @PathVariable UUID productId
+    ) {
+        ProductImageContent image =
+                catalogService.getProductImage(productId);
 
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(image.contentType()))
+                .contentType(
+                        MediaType.parseMediaType(
+                                image.contentType()
+                        )
+                )
                 .contentLength(image.contentLength())
-                .cacheControl(CacheControl.maxAge(5, TimeUnit.MINUTES).cachePublic())
-                .body(new InputStreamResource(image.content()));
+                .cacheControl(
+                        CacheControl
+                                .maxAge(
+                                        5,
+                                        TimeUnit.MINUTES
+                                )
+                                .cachePublic()
+                )
+                .body(
+                        new InputStreamResource(
+                                image.content()
+                        )
+                );
     }
 
+    private PageQuery toPageQuery(
+            int page,
+            int size
+    ) {
+        return new PageQuery(
+                page,
+                Math.min(size, MAX_PAGE_SIZE)
+        );
+    }
 
-    private UploadProductImageCommand toUploadProductImageCommand(MultipartFile file) {
+    private int toCursorSize(int size) {
+        if (size < 1) {
+            throw new IllegalArgumentException(
+                    "size must be >= 1"
+            );
+        }
+
+        return Math.min(size, MAX_PAGE_SIZE);
+    }
+
+    private UploadProductImageCommand
+    toUploadProductImageCommand(
+            MultipartFile file
+    ) {
         try {
             return new UploadProductImageCommand(
                     file.getOriginalFilename(),
@@ -165,11 +318,11 @@ public class CatalogController {
                     file.getSize(),
                     file.getInputStream()
             );
-        } catch (IOException ex) {
-            throw new BusinessException(CatalogErrorCode.INVALID_PRODUCT_IMAGE, "image content cannot be read");
+        } catch (IOException exception) {
+            throw new BusinessException(
+                    CatalogErrorCode.INVALID_PRODUCT_IMAGE,
+                    "image content cannot be read"
+            );
         }
     }
-
-
-
 }

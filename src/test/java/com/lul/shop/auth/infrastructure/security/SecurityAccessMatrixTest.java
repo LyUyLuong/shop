@@ -8,6 +8,8 @@ import com.lul.shop.catalog.application.dto.ProductResult;
 import com.lul.shop.catalog.domain.ProductSearchCriteria;
 import com.lul.shop.catalog.domain.ProductStatus;
 import com.lul.shop.catalog.presentation.CatalogController;
+import com.lul.shop.catalog.application.CatalogErrorCode;
+import com.lul.shop.catalog.application.dto.ProductCursorPageResult;
 import com.lul.shop.ordering.application.OrderItemImageService;
 import com.lul.shop.ordering.application.OrderOperationsService;
 import com.lul.shop.ordering.application.OrderingService;
@@ -26,6 +28,7 @@ import com.lul.shop.shared.config.WebConfig;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.GlobalExceptionHandler;
+import com.lul.shop.shared.exception.BusinessException;
 import com.lul.shop.payment.application.PaymentService;
 import com.lul.shop.payment.presentation.PaymentController;
 import com.lul.shop.payment.application.dto.CollectCodCommand;
@@ -192,6 +195,88 @@ class SecurityAccessMatrixTest {
                 null,
                 new PageQuery(0, 20)
         );
+    }
+
+    @Test
+    void shouldAllowPublicProductCursorSearchWithoutJwt()
+            throws Exception {
+
+        ProductCursorPageResult result =
+                emptyCursorPage();
+
+        when(catalogService.searchActiveProductsByCursor(
+                isNull(),
+                isNull(),
+                eq(20)
+        )).thenReturn(result);
+
+        mockMvc.perform(get("/api/v1/products/cursor"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success")
+                        .value(true))
+                .andExpect(jsonPath("$.data.content")
+                        .isArray())
+                .andExpect(jsonPath("$.data.size")
+                        .value(20))
+                .andExpect(jsonPath("$.data.hasNext")
+                        .value(false))
+                .andExpect(jsonPath("$.data.nextCursor")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.data.page")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.data.totalElements")
+                        .doesNotExist())
+                .andExpect(jsonPath("$.data.totalPages")
+                        .doesNotExist());
+
+        verify(catalogService)
+                .searchActiveProductsByCursor(
+                        null,
+                        null,
+                        20
+                );
+    }
+
+    @Test
+    void shouldReturnStableCatalogErrorForInvalidPublicCursor()
+            throws Exception {
+
+        String invalidCursor = "invalid-cursor";
+
+        when(catalogService.searchActiveProductsByCursor(
+                isNull(),
+                eq(invalidCursor),
+                eq(20)
+        )).thenThrow(
+                new BusinessException(
+                        CatalogErrorCode
+                                .INVALID_PRODUCT_SEARCH_CURSOR
+                )
+        );
+
+        mockMvc.perform(
+                        get("/api/v1/products/cursor")
+                                .param(
+                                        "cursor",
+                                        invalidCursor
+                                )
+                )
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success")
+                        .value(false))
+                .andExpect(jsonPath("$.error.code")
+                        .value("CATALOG_010"))
+                .andExpect(jsonPath("$.error.message")
+                        .value(
+                                "Product search cursor is invalid"
+                        ));
+
+        verify(catalogService)
+                .searchActiveProductsByCursor(
+                        null,
+                        invalidCursor,
+                        20
+                );
     }
 
     @Test
@@ -420,6 +505,55 @@ class SecurityAccessMatrixTest {
     }
 
     @Test
+    void shouldAllowAdminToAccessAdminProductCursorRoute()
+            throws Exception {
+
+        ProductSearchCriteria criteria =
+                ProductSearchCriteria.withStatus(
+                        null,
+                        null
+                );
+
+        ProductCursorPageResult result =
+                emptyCursorPage();
+
+        when(catalogService.searchProductsByCursor(
+                eq(criteria),
+                isNull(),
+                eq(20)
+        )).thenReturn(result);
+
+        mockMvc.perform(
+                        get("/api/v1/admin/products/cursor")
+                                .with(jwt()
+                                        .jwt(builder ->
+                                                builder.subject(
+                                                        USER_ID.toString()
+                                                )
+                                        )
+                                        .authorities(
+                                                ADMIN_AUTHORITY
+                                        )
+                                )
+                )
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success")
+                        .value(true))
+                .andExpect(jsonPath("$.data.content")
+                        .isArray())
+                .andExpect(jsonPath("$.data.size")
+                        .value(20))
+                .andExpect(jsonPath("$.data.hasNext")
+                        .value(false));
+
+        verify(catalogService).searchProductsByCursor(
+                criteria,
+                null,
+                20
+        );
+    }
+
+    @Test
     void shouldAllowAdminToAccessAdminOrderRoute()
             throws Exception {
 
@@ -494,6 +628,7 @@ class SecurityAccessMatrixTest {
                         "deactivateProduct",
                         "uploadProductImage",
                         "searchAdminProducts",
+                        "searchAdminProductsByCursor",
                         "getAdminProduct",
                         "searchOrders",
                         "getOrder",
@@ -815,6 +950,10 @@ class SecurityAccessMatrixTest {
                 ),
                 Arguments.of(
                         HttpMethod.GET,
+                        "/api/v1/admin/products/cursor"
+                ),
+                Arguments.of(
+                        HttpMethod.GET,
                         "/api/v1/admin/orders"
                 ),
                 Arguments.of(
@@ -833,6 +972,7 @@ class SecurityAccessMatrixTest {
     private static Stream<String> adminRoutes() {
         return Stream.of(
                 "/api/v1/admin/products",
+                "/api/v1/admin/products/cursor",
                 "/api/v1/admin/orders"
         );
     }
@@ -850,6 +990,16 @@ class SecurityAccessMatrixTest {
                 null,
                 Instant.parse("2026-07-01T10:00:00Z"),
                 Instant.parse("2026-07-02T10:00:00Z")
+        );
+    }
+
+    private static ProductCursorPageResult
+    emptyCursorPage() {
+        return new ProductCursorPageResult(
+                List.of(),
+                20,
+                false,
+                null
         );
     }
 
