@@ -4,6 +4,8 @@ import com.lul.shop.catalog.application.CatalogErrorCode;
 import com.lul.shop.catalog.domain.Product;
 import com.lul.shop.catalog.domain.ProductRepository;
 import com.lul.shop.catalog.domain.ProductSearchCriteria;
+import com.lul.shop.catalog.domain.ProductSearchSlice;
+import com.lul.shop.catalog.domain.ProductSearchWindow;
 import com.lul.shop.catalog.domain.ProductStatus;
 import com.lul.shop.catalog.infrastructure.persistence.entity.ProductJpaEntity;
 import com.lul.shop.catalog.infrastructure.persistence.mapper.ProductMapper;
@@ -32,9 +34,11 @@ public class ProductRepositoryImpl implements ProductRepository {
     private final ProductQueryRepository productQueryRepository;
     private final ProductMapper productMapper;
 
-    public ProductRepositoryImpl(ProductJpaRepository productJpaRepository,
-                                 ProductQueryRepository productQueryRepository,
-                                 ProductMapper productMapper) {
+    public ProductRepositoryImpl(
+            ProductJpaRepository productJpaRepository,
+            ProductQueryRepository productQueryRepository,
+            ProductMapper productMapper
+    ) {
         this.productJpaRepository = productJpaRepository;
         this.productQueryRepository = productQueryRepository;
         this.productMapper = productMapper;
@@ -65,31 +69,46 @@ public class ProductRepositoryImpl implements ProductRepository {
         Objects.requireNonNull(currentProductId, "currentProductId must not be null");
 
         return normalizeSku(sku)
-                .map(normalizedSku -> productJpaRepository.existsOtherProductWithSku(normalizedSku, currentProductId))
+                .map(normalizedSku ->
+                        productJpaRepository
+                                .existsOtherProductWithSku(
+                                        normalizedSku,
+                                        currentProductId
+                                )
+                )
                 .orElse(false);
     }
 
     @Override
     @Transactional
-    public boolean decreaseStockIfEnough(UUID productId, int quantity) {
+    public boolean decreaseStockIfEnough(
+            UUID productId,
+            int quantity
+    ) {
         Objects.requireNonNull(productId, "productId must not be null");
 
         if (quantity <= 0) {
-            throw new IllegalArgumentException("quantity must be greater than 0");
+            throw new IllegalArgumentException(
+                    "quantity must be greater than 0"
+            );
         }
 
-        int affectedRows = productJpaRepository.decreaseStockIfEnough(
-                productId,
-                quantity,
-                ProductStatus.ACTIVE
-        );
+        int affectedRows =
+                productJpaRepository.decreaseStockIfEnough(
+                        productId,
+                        quantity,
+                        ProductStatus.ACTIVE
+                );
 
         return affectedRows == 1;
     }
 
     @Override
     @Transactional
-    public boolean increaseStock(UUID productId, int quantity) {
+    public boolean increaseStock(
+            UUID productId,
+            int quantity
+    ) {
         Objects.requireNonNull(
                 productId,
                 "productId must not be null"
@@ -101,10 +120,11 @@ public class ProductRepositoryImpl implements ProductRepository {
             );
         }
 
-        int affectedRows = productJpaRepository.increaseStock(
-                productId,
-                quantity
-        );
+        int affectedRows =
+                productJpaRepository.increaseStock(
+                        productId,
+                        quantity
+                );
 
         return affectedRows == 1;
     }
@@ -112,7 +132,8 @@ public class ProductRepositoryImpl implements ProductRepository {
     @Override
     @Transactional
     public Product save(Product product) {
-        ProductJpaEntity entity = productMapper.toEntity(product);
+        ProductJpaEntity entity =
+                productMapper.toEntity(product);
 
         try {
             ProductJpaEntity savedEntity =
@@ -124,12 +145,15 @@ public class ProductRepositoryImpl implements ProductRepository {
                     CatalogErrorCode.PRODUCT_VERSION_CONFLICT
             );
         } catch (DataIntegrityViolationException exception) {
-            if (isConstraintViolation(
-                    exception,
-                    PRODUCT_SKU_UNIQUE_INDEX
-            )) {
+            if (
+                    isConstraintViolation(
+                            exception,
+                            PRODUCT_SKU_UNIQUE_INDEX
+                    )
+            ) {
                 throw new BusinessException(
-                        CatalogErrorCode.PRODUCT_SKU_ALREADY_EXISTS
+                        CatalogErrorCode
+                                .PRODUCT_SKU_ALREADY_EXISTS
                 );
             }
 
@@ -138,8 +162,22 @@ public class ProductRepositoryImpl implements ProductRepository {
     }
 
     @Override
-    public PageResult<Product> search(ProductSearchCriteria criteria, PageQuery pageQuery) {
-        return productQueryRepository.search(criteria, pageQuery)
+    public PageResult<Product> search(
+            ProductSearchCriteria criteria,
+            PageQuery pageQuery
+    ) {
+        return productQueryRepository
+                .search(criteria, pageQuery)
+                .map(productMapper::toDomain);
+    }
+
+    @Override
+    public ProductSearchSlice<Product> search(
+            ProductSearchCriteria criteria,
+            ProductSearchWindow window
+    ) {
+        return productQueryRepository
+                .search(criteria, window)
                 .map(productMapper::toDomain);
     }
 
@@ -150,10 +188,13 @@ public class ProductRepositoryImpl implements ProductRepository {
         Throwable current = exception;
 
         while (current != null) {
-            if (current instanceof ConstraintViolationException violation
-                    && expectedConstraint.equals(
-                    violation.getConstraintName()
-            )) {
+            if (
+                    current instanceof
+                            ConstraintViolationException violation
+                            && expectedConstraint.equals(
+                            violation.getConstraintName()
+                    )
+            ) {
                 return true;
             }
 
@@ -172,6 +213,8 @@ public class ProductRepositoryImpl implements ProductRepository {
             return Optional.empty();
         }
 
-        return Optional.of(sku.trim().toUpperCase(Locale.ROOT));
+        return Optional.of(
+                sku.trim().toUpperCase(Locale.ROOT)
+        );
     }
 }

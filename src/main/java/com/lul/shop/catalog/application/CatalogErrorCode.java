@@ -11,7 +11,11 @@ public enum CatalogErrorCode implements ErrorCode {
     PRODUCT_IMAGE_UPLOAD_FAILED("CATALOG_005", "Product image upload failed", 502),
     PRODUCT_IMAGE_NOT_FOUND("CATALOG_006", "Product image was not found", 404),
     PRODUCT_IMAGE_READ_FAILED("CATALOG_007", "Product image could not be loaded", 502),
-    PRODUCT_VERSION_CONFLICT("CATALOG_008", "Product was modified by another operation", 409);
+    PRODUCT_VERSION_CONFLICT("CATALOG_008", "Product was modified by another operation", 409),
+    PRODUCT_PAGE_OFFSET_TOO_LARGE("CATALOG_009", "Product page offset is too large", 400),
+    INVALID_PRODUCT_SEARCH_CURSOR("CATALOG_010", "Product search cursor is invalid", 400);
+
+
 
     private final String code;
     private final String message;
