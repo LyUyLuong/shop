@@ -5,9 +5,12 @@ BEGIN
         RAISE EXCEPTION 'Invalid PS-D N1 environment';
     END IF;
 
-    IF to_regconfig(
-        'public.shop_product_name_unaccent_v1'
-    ) IS NULL THEN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_ts_config
+        WHERE cfgname = 'shop_product_name_unaccent_v1'
+          AND cfgnamespace = 'public'::regnamespace
+    ) THEN
         RAISE EXCEPTION 'FTS configuration is missing';
     END IF;
 

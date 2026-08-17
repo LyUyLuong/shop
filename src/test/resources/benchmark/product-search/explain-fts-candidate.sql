@@ -1,4 +1,4 @@
--- PS-D runner must replace __PS_D_NAME_DOCUMENT__ with exactly:
+-- PS-D runner must replace the name-document placeholder with exactly:
 -- N0/N0+S/N1/N1+S:
 --   to_tsvector(config, normalize(product.name, NFC))
 -- N2/N2+S:

@@ -45,9 +45,12 @@ SELECT
         FROM pg_catalog.pg_extension
         WHERE extname = 'unaccent'
     ) AS unaccent_installed,
-    to_regconfig(
-        'public.shop_product_name_unaccent_v1'
-    ) IS NOT NULL AS candidate_configuration_installed;
+    EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_ts_config
+        WHERE cfgname = 'shop_product_name_unaccent_v1'
+          AND cfgnamespace = 'public'::regnamespace
+    ) AS candidate_configuration_installed;
 
 SELECT
     has_database_privilege(

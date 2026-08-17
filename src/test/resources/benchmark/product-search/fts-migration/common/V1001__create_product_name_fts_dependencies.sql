@@ -45,9 +45,12 @@ BEGIN
             'unaccent already exists; possible lab residue';
     END IF;
 
-    IF to_regconfig(
-        'public.shop_product_name_unaccent_v1'
-    ) IS NOT NULL THEN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_ts_config
+        WHERE cfgname = 'shop_product_name_unaccent_v1'
+          AND cfgnamespace = 'public'::regnamespace
+    ) THEN
         RAISE EXCEPTION
             'FTS configuration already exists';
     END IF;

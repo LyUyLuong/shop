@@ -2,15 +2,15 @@ name: shop-product-search-fts-benchmark
 
 services:
   postgres:
-    image: ${PS_D_POSTGRES_IMAGE:?PS_D_POSTGRES_IMAGE must be set}
+    image: ${PS_D_POSTGRES_IMAGE:-postgres:16.14-alpine}
     environment:
       POSTGRES_DB: shop_fts_benchmark
       POSTGRES_USER: shop_fts_migration
       POSTGRES_PASSWORD: shop_fts_benchmark
     ports:
-      - "127.0.0.1:${PS_D_POSTGRES_PORT:?PS_D_POSTGRES_PORT must be set}:5432"
+      - "127.0.0.1:${PS_D_POSTGRES_PORT:-55416}:5432"
     volumes:
-      - product-search-fts-postgres-data:/var/lib/postgresql/data
+      - product-search-fts-postgres-data:/var/lib/postgresql
       - ./src/main/resources/db/migration:/production-migrations:ro
       - ./src/test/resources/benchmark/product-search:/benchmark:ro
     healthcheck:

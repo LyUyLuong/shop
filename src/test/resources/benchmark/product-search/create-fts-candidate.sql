@@ -68,9 +68,12 @@ BEGIN
         FROM pg_catalog.pg_extension
         WHERE extname = 'unaccent'
     )
-       OR to_regconfig(
-           'public.shop_product_name_unaccent_v1'
-       ) IS NOT NULL
+       OR EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_ts_config
+           WHERE cfgname = 'shop_product_name_unaccent_v1'
+             AND cfgnamespace = 'public'::regnamespace
+       )
        OR to_regclass(
            'public.idx_products_name_fts_n1_v1'
        ) IS NOT NULL
@@ -235,7 +238,9 @@ BEGIN
             to_regclass('public.idx_products_name_fts_n2_v1')
                 IS NOT NULL
         )::integer
-    ) <> CASE WHEN v_name_index_expected THEN 1 ELSE 0 END THEN
+    ) <> (
+        CASE WHEN v_name_index_expected THEN 1 ELSE 0 END
+    ) THEN
         RAISE EXCEPTION
             'Unexpected name-index inventory for %',
             v_state;
@@ -305,30 +310,12 @@ SELECT
     pg_size_pretty(
         pg_total_relation_size('public.products'::regclass)
     ) AS total_relation_size,
-    CASE
-        WHEN to_regclass(
-            'public.idx_products_name_fts_n1_v1'
-        ) IS NULL THEN 0
-        ELSE pg_relation_size(
-            'public.idx_products_name_fts_n1_v1'
-                ::regclass
-        )
-    END AS n1_index_bytes,
-    CASE
-        WHEN to_regclass(
-            'public.idx_products_name_fts_n2_v1'
-        ) IS NULL THEN 0
-        ELSE pg_relation_size(
-            'public.idx_products_name_fts_n2_v1'
-                ::regclass
-        )
-    END AS n2_index_bytes,
-    CASE
-        WHEN to_regclass(
-            'public.idx_products_sku_nfc_prefix_v1'
-        ) IS NULL THEN 0
-        ELSE pg_relation_size(
-            'public.idx_products_sku_nfc_prefix_v1'
-                ::regclass
-        )
-    END AS sku_companion_bytes;
+    pg_relation_size(
+        to_regclass('public.idx_products_name_fts_n1_v1')
+    ) AS n1_index_bytes,
+    pg_relation_size(
+        to_regclass('public.idx_products_name_fts_n2_v1')
+    ) AS n2_index_bytes,
+    pg_relation_size(
+        to_regclass('public.idx_products_sku_nfc_prefix_v1')
+    ) AS sku_companion_bytes;

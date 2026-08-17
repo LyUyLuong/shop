@@ -225,6 +225,13 @@ function Invoke-NativeCapture {
         [switch]$AllowFailure
     )
 
+    # Windows PowerShell 5.1 treats native stderr lines captured with 2>&1
+    # as errors; with $ErrorActionPreference = "Stop" the first status line
+    # (for example "Container ... Stopping") terminates the run. Scope the
+    # preference to Continue for the invocation only; the real failure
+    # signal remains the process exit code checked below.
+    $ErrorActionPreference = "Continue"
+
     $Output = @(
         & $FilePath @CommandArguments 2>&1 |
             ForEach-Object { "$_" }
@@ -325,7 +332,17 @@ function Wait-Postgres {
         Start-Sleep -Seconds 2
     }
 
-    throw "PostgreSQL did not become ready."
+    $Logs = Invoke-Compose `
+        -Arguments @("logs", "--no-color", "postgres", "--tail", "40") `
+        -AllowFailure
+
+    throw (
+        "PostgreSQL did not become ready." +
+        [Environment]::NewLine +
+        "Last postgres container logs:" +
+        [Environment]::NewLine +
+        $Logs.Text
+    )
 }
 
 function Remove-Database {
@@ -763,7 +780,8 @@ function Initialize-PristineDatabase {
         -Command (
             "GRANT shop_benchmark TO shop_fts_migration; " +
             "GRANT USAGE ON SCHEMA public TO shop_benchmark; " +
-            "GRANT SELECT, INSERT ON public.products TO shop_benchmark;"
+            "GRANT SELECT, INSERT ON public.products TO shop_benchmark; " +
+            "GRANT SELECT ON public.flyway_schema_history TO shop_benchmark;"
         ) |
         Out-Null
 
@@ -806,6 +824,7 @@ function Initialize-PristineDatabase {
         -Database $SourceDatabase `
         -Command (
             "REVOKE ALL ON public.products FROM shop_benchmark; " +
+            "REVOKE ALL ON public.flyway_schema_history FROM shop_benchmark; " +
             "REVOKE ALL ON SCHEMA public FROM shop_benchmark; " +
             "REVOKE shop_benchmark FROM shop_fts_migration;"
         ) |
@@ -1839,10 +1858,7 @@ Write-Utf8File `
 
 $Hashes = foreach ($File in $RequiredFiles) {
     [pscustomobject]@{
-        Path = [System.IO.Path]::GetRelativePath(
-            $RepositoryRoot,
-            $File
-        )
+        Path = $File.Substring($RepositoryRoot.Length).TrimStart('\', '/').Replace('\', '/')
         Sha256 = (
             Get-FileHash -LiteralPath $File -Algorithm SHA256
         ).Hash.ToLowerInvariant()

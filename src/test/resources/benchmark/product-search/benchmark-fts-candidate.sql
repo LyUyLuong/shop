@@ -1,8 +1,9 @@
--- Render __PS_D_NAME_DOCUMENT__ before pgbench execution.
+-- Render the name-document placeholder before pgbench execution.
 -- Runner connects as shop_fts_migration with:
 -- PGOPTIONS="-c role=shop_fts_runtime"
 --
--- Required pgbench variables:
+-- Required pgbench variables (values must be SQL-ready: quoted
+-- strings, true/false booleans, plain numbers):
 -- is_browse, is_count, is_cursor, is_write,
 -- is_insert, is_name_update, is_sku_update, is_stock_update,
 -- is_status_update, is_image_update, is_optimistic_conflict,
@@ -22,8 +23,8 @@ INSERT INTO public.products (
     created_at, updated_at
 )
 VALUES (
-    CAST(:'write_id' AS uuid),
-    CAST(:'write_sku' AS varchar),
+    :write_id,
+    :write_sku,
     0,
     'PS-D write-probe product',
     'PS-D isolated write probe',
@@ -41,21 +42,21 @@ SET
     name = name || ' PS-D',
     updated_at = clock_timestamp(),
     version = version + 1
-WHERE id = CAST(:'target_id' AS uuid);
+WHERE id = :target_id;
     \elif :is_sku_update
 UPDATE public.products
 SET
     sku = sku || '-W',
     updated_at = clock_timestamp(),
     version = version + 1
-WHERE id = CAST(:'target_id' AS uuid);
+WHERE id = :target_id;
     \elif :is_stock_update
 UPDATE public.products
 SET
     stock_quantity = stock_quantity + 1,
     updated_at = clock_timestamp(),
     version = version + 1
-WHERE id = CAST(:'target_id' AS uuid);
+WHERE id = :target_id;
     \elif :is_status_update
 UPDATE public.products
 SET
@@ -65,21 +66,21 @@ SET
     END,
     updated_at = clock_timestamp(),
     version = version + 1
-WHERE id = CAST(:'target_id' AS uuid);
+WHERE id = :target_id;
     \elif :is_image_update
 UPDATE public.products
 SET
     image_url = 'https://example.invalid/ps-d-write-probe',
     updated_at = clock_timestamp(),
     version = version + 1
-WHERE id = CAST(:'target_id' AS uuid);
+WHERE id = :target_id;
     \elif :is_optimistic_conflict
 UPDATE public.products
 SET
     stock_quantity = stock_quantity + 1,
     updated_at = clock_timestamp(),
     version = version + 1
-WHERE id = CAST(:'target_id' AS uuid)
+WHERE id = :target_id
   AND version = -1;
     \else
 SELECT 1 / 0;
@@ -92,7 +93,7 @@ ROLLBACK;
     \if :is_count
 SELECT count(product.id)
 FROM public.products AS product
-WHERE CASE CAST(:'visibility' AS text)
+WHERE CASE :visibility
     WHEN 'PUBLIC' THEN product.status = 'ACTIVE'
     WHEN 'ADMIN_ALL' THEN TRUE
     WHEN 'ADMIN_ACTIVE' THEN product.status = 'ACTIVE'
@@ -100,12 +101,12 @@ WHERE CASE CAST(:'visibility' AS text)
     ELSE FALSE
 END
 AND (
-    NOT CAST(:has_minimum_price AS boolean)
-    OR product.price >= CAST(:minimum_price AS numeric)
+    NOT :has_minimum_price
+    OR product.price >= :minimum_price
 )
 AND (
-    NOT CAST(:has_maximum_price AS boolean)
-    OR product.price <= CAST(:maximum_price AS numeric)
+    NOT :has_maximum_price
+    OR product.price <= :maximum_price
 );
     \elif :is_cursor
 SELECT
@@ -122,7 +123,7 @@ SELECT
     product.updated_at,
     product.version
 FROM public.products AS product
-WHERE CASE CAST(:'visibility' AS text)
+WHERE CASE :visibility
     WHEN 'PUBLIC' THEN product.status = 'ACTIVE'
     WHEN 'ADMIN_ALL' THEN TRUE
     WHEN 'ADMIN_ACTIVE' THEN product.status = 'ACTIVE'
@@ -130,30 +131,28 @@ WHERE CASE CAST(:'visibility' AS text)
     ELSE FALSE
 END
 AND (
-    NOT CAST(:has_minimum_price AS boolean)
-    OR product.price >= CAST(:minimum_price AS numeric)
+    NOT :has_minimum_price
+    OR product.price >= :minimum_price
 )
 AND (
-    NOT CAST(:has_maximum_price AS boolean)
-    OR product.price <= CAST(:maximum_price AS numeric)
+    NOT :has_maximum_price
+    OR product.price <= :maximum_price
 )
 AND (
     product.created_at < (
         TIMESTAMPTZ 'epoch'
-        + CAST(:anchor_epoch_micros AS double precision)
-          * INTERVAL '1 microsecond'
+        + :anchor_epoch_micros * INTERVAL '1 microsecond'
     )
     OR (
         product.created_at = (
             TIMESTAMPTZ 'epoch'
-            + CAST(:anchor_epoch_micros AS double precision)
-              * INTERVAL '1 microsecond'
+            + :anchor_epoch_micros * INTERVAL '1 microsecond'
         )
-        AND product.id < CAST(:'anchor_id' AS uuid)
+        AND product.id < :anchor_id
     )
 )
 ORDER BY product.created_at DESC, product.id DESC
-FETCH FIRST CAST(:page_size AS integer) ROWS ONLY;
+FETCH FIRST :page_size ROWS ONLY;
     \else
 SELECT
     product.id,
@@ -169,7 +168,7 @@ SELECT
     product.updated_at,
     product.version
 FROM public.products AS product
-WHERE CASE CAST(:'visibility' AS text)
+WHERE CASE :visibility
     WHEN 'PUBLIC' THEN product.status = 'ACTIVE'
     WHEN 'ADMIN_ALL' THEN TRUE
     WHEN 'ADMIN_ACTIVE' THEN product.status = 'ACTIVE'
@@ -177,23 +176,23 @@ WHERE CASE CAST(:'visibility' AS text)
     ELSE FALSE
 END
 AND (
-    NOT CAST(:has_minimum_price AS boolean)
-    OR product.price >= CAST(:minimum_price AS numeric)
+    NOT :has_minimum_price
+    OR product.price >= :minimum_price
 )
 AND (
-    NOT CAST(:has_maximum_price AS boolean)
-    OR product.price <= CAST(:maximum_price AS numeric)
+    NOT :has_maximum_price
+    OR product.price <= :maximum_price
 )
 ORDER BY product.created_at DESC, product.id DESC
-OFFSET CAST(:offset_rows AS bigint)
-FETCH FIRST CAST(:page_size AS integer) ROWS ONLY;
+OFFSET :offset_rows
+FETCH FIRST :page_size ROWS ONLY;
     \endif
 
 \else
 
     \if :is_count
 WITH parameters AS (
-    SELECT normalize(CAST(:'keyword' AS text), NFC) AS keyword_nfc
+    SELECT normalize(:keyword, NFC) AS keyword_nfc
 ),
 normalized_parameters AS (
     SELECT
@@ -228,7 +227,7 @@ evaluated AS NOT MATERIALIZED (
         parameters.*
     FROM public.products AS product
     CROSS JOIN normalized_parameters AS parameters
-    WHERE CASE CAST(:'visibility' AS text)
+    WHERE CASE :visibility
         WHEN 'PUBLIC' THEN product.status = 'ACTIVE'
         WHEN 'ADMIN_ALL' THEN TRUE
         WHEN 'ADMIN_ACTIVE' THEN product.status = 'ACTIVE'
@@ -236,12 +235,12 @@ evaluated AS NOT MATERIALIZED (
         ELSE FALSE
     END
     AND (
-        NOT CAST(:has_minimum_price AS boolean)
-        OR product.price >= CAST(:minimum_price AS numeric)
+        NOT :has_minimum_price
+        OR product.price >= :minimum_price
     )
     AND (
-        NOT CAST(:has_maximum_price AS boolean)
-        OR product.price <= CAST(:maximum_price AS numeric)
+        NOT :has_maximum_price
+        OR product.price <= :maximum_price
     )
 )
 SELECT count(evaluated.id)
@@ -253,7 +252,7 @@ WHERE
 
     \else
 WITH parameters AS (
-    SELECT normalize(CAST(:'keyword' AS text), NFC) AS keyword_nfc
+    SELECT normalize(:keyword, NFC) AS keyword_nfc
 ),
 normalized_parameters AS (
     SELECT
@@ -328,7 +327,7 @@ evaluated AS NOT MATERIALIZED (
         parameters.*
     FROM public.products AS product
     CROSS JOIN normalized_parameters AS parameters
-    WHERE CASE CAST(:'visibility' AS text)
+    WHERE CASE :visibility
         WHEN 'PUBLIC' THEN product.status = 'ACTIVE'
         WHEN 'ADMIN_ALL' THEN TRUE
         WHEN 'ADMIN_ACTIVE' THEN product.status = 'ACTIVE'
@@ -336,12 +335,12 @@ evaluated AS NOT MATERIALIZED (
         ELSE FALSE
     END
     AND (
-        NOT CAST(:has_minimum_price AS boolean)
-        OR product.price >= CAST(:minimum_price AS numeric)
+        NOT :has_minimum_price
+        OR product.price >= :minimum_price
     )
     AND (
-        NOT CAST(:has_maximum_price AS boolean)
-        OR product.price <= CAST(:maximum_price AS numeric)
+        NOT :has_maximum_price
+        OR product.price <= :maximum_price
     )
 ),
 signals AS NOT MATERIALIZED (
@@ -408,41 +407,35 @@ SELECT
     ranked.rank_score
 FROM ranked
 WHERE
-    NOT CAST(:is_cursor AS boolean)
-    OR ranked.match_tier > CAST(:anchor_tier AS integer)
+    NOT :is_cursor
+    OR ranked.match_tier > :anchor_tier
     OR (
-        ranked.match_tier = CAST(:anchor_tier AS integer)
-        AND ranked.surface_form_priority >
-            CAST(:anchor_surface AS integer)
+        ranked.match_tier = :anchor_tier
+        AND ranked.surface_form_priority > :anchor_surface
     )
     OR (
-        ranked.match_tier = CAST(:anchor_tier AS integer)
-        AND ranked.surface_form_priority =
-            CAST(:anchor_surface AS integer)
-        AND ranked.rank_score < CAST(:anchor_score AS bigint)
+        ranked.match_tier = :anchor_tier
+        AND ranked.surface_form_priority = :anchor_surface
+        AND ranked.rank_score < :anchor_score
     )
     OR (
-        ranked.match_tier = CAST(:anchor_tier AS integer)
-        AND ranked.surface_form_priority =
-            CAST(:anchor_surface AS integer)
-        AND ranked.rank_score = CAST(:anchor_score AS bigint)
+        ranked.match_tier = :anchor_tier
+        AND ranked.surface_form_priority = :anchor_surface
+        AND ranked.rank_score = :anchor_score
         AND ranked.created_at < (
             TIMESTAMPTZ 'epoch'
-            + CAST(:anchor_epoch_micros AS double precision)
-              * INTERVAL '1 microsecond'
+            + :anchor_epoch_micros * INTERVAL '1 microsecond'
         )
     )
     OR (
-        ranked.match_tier = CAST(:anchor_tier AS integer)
-        AND ranked.surface_form_priority =
-            CAST(:anchor_surface AS integer)
-        AND ranked.rank_score = CAST(:anchor_score AS bigint)
+        ranked.match_tier = :anchor_tier
+        AND ranked.surface_form_priority = :anchor_surface
+        AND ranked.rank_score = :anchor_score
         AND ranked.created_at = (
             TIMESTAMPTZ 'epoch'
-            + CAST(:anchor_epoch_micros AS double precision)
-              * INTERVAL '1 microsecond'
+            + :anchor_epoch_micros * INTERVAL '1 microsecond'
         )
-        AND ranked.id < CAST(:'anchor_id' AS uuid)
+        AND ranked.id < :anchor_id
     )
 ORDER BY
     ranked.match_tier ASC,
@@ -451,9 +444,9 @@ ORDER BY
     ranked.created_at DESC,
     ranked.id DESC
 OFFSET CASE
-    WHEN CAST(:is_cursor AS boolean) THEN 0
-    ELSE CAST(:offset_rows AS bigint)
+    WHEN :is_cursor THEN 0
+    ELSE :offset_rows
 END
-FETCH FIRST CAST(:page_size AS integer) ROWS ONLY;
+FETCH FIRST :page_size ROWS ONLY;
     \endif
 \endif

@@ -9,6 +9,9 @@ param(
     [ValidateSet("Both", "16.14", "18.3")]
     [string]$Postgres = "Both",
 
+    [ValidateSet("N0", "N0+S", "N1", "N1+S", "N2", "N2+S")]
+    [string]$Only,
+
     [switch]$Reset,
     [switch]$AllowDirty
 )
@@ -18,6 +21,10 @@ $ErrorActionPreference = "Stop"
 
 $Seed = 20260806
 $States = @("N0", "N0+S", "N1", "N1+S", "N2", "N2+S")
+
+if ($Only) {
+    $States = @($Only)
+}
 
 if (-not $Reset) {
     throw (
@@ -131,6 +138,13 @@ function Invoke-NativeCapture {
         [switch]$AllowFailure
     )
 
+    # Windows PowerShell 5.1 treats native stderr lines captured with 2>&1
+    # as errors; with $ErrorActionPreference = "Stop" the first status line
+    # (for example "Container ... Stopping") terminates the run. Scope the
+    # preference to Continue for the invocation only; the real failure
+    # signal remains the process exit code checked below.
+    $ErrorActionPreference = "Continue"
+
     $Output = @(
         & $FilePath @CommandArguments 2>&1 |
             ForEach-Object { "$_" }
@@ -230,7 +244,17 @@ function Wait-Postgres {
         Start-Sleep -Seconds 2
     }
 
-    throw "PostgreSQL did not become ready."
+    $Logs = Invoke-Compose `
+        -Arguments @("logs", "--no-color", "postgres", "--tail", "40") `
+        -AllowFailure
+
+    throw (
+        "PostgreSQL did not become ready." +
+        [Environment]::NewLine +
+        "Last postgres container logs:" +
+        [Environment]::NewLine +
+        $Logs.Text
+    )
 }
 
 function Remove-Database {
@@ -343,7 +367,8 @@ function Initialize-PristineDatabase {
         -Command (
             "GRANT shop_benchmark TO shop_fts_migration; " +
             "GRANT USAGE ON SCHEMA public TO shop_benchmark; " +
-            "GRANT SELECT, INSERT ON public.products TO shop_benchmark;"
+            "GRANT SELECT, INSERT ON public.products TO shop_benchmark; " +
+            "GRANT SELECT ON public.flyway_schema_history TO shop_benchmark;"
         ) |
         Out-Null
 
@@ -386,6 +411,7 @@ function Initialize-PristineDatabase {
         -Database $SourceDatabase `
         -Command (
             "REVOKE ALL ON public.products FROM shop_benchmark; " +
+            "REVOKE ALL ON public.flyway_schema_history FROM shop_benchmark; " +
             "REVOKE ALL ON SCHEMA public FROM shop_benchmark; " +
             "REVOKE shop_benchmark FROM shop_fts_migration;"
         ) |
@@ -714,12 +740,40 @@ function Invoke-PgbenchWorkload {
     $WarmupPerClient = [int]($WarmupTotal / $Clients)
     $MeasuredPerClient = [int]($MeasuredTotal / $Clients)
 
-    $Variables = Get-CommonVariables -Workload $Workload
-    $PgbenchVariables = @()
-
-    foreach ($variable in $Variables) {
-        $PgbenchVariables += @("-D", $variable)
-    }
+    # pgbench does not support psql's :'name' quoting. The rendered
+    # benchmark file uses plain :name references. In prepared mode
+    # pgbench binds each variable as a query parameter, so values must
+    # be BARE: strings without SQL quotes, True/False booleans, and
+    # plain numbers; PostgreSQL infers the parameter types.
+    $PgbenchVariables = @(
+        "-D", "is_browse=$($Workload.Browse -eq 1)",
+        "-D", "is_count=$($Workload.Count -eq 1)",
+        "-D", "is_cursor=$($Workload.Cursor -eq 1)",
+        "-D", "is_write=False",
+        "-D", "is_insert=False",
+        "-D", "is_name_update=False",
+        "-D", "is_sku_update=False",
+        "-D", "is_stock_update=False",
+        "-D", "is_status_update=False",
+        "-D", "is_image_update=False",
+        "-D", "is_optimistic_conflict=False",
+        "-D", "keyword=$($Workload.Keyword)",
+        "-D", "visibility=$($Workload.Visibility)",
+        "-D", "minimum_price=0",
+        "-D", "maximum_price=0",
+        "-D", "has_minimum_price=False",
+        "-D", "has_maximum_price=False",
+        "-D", "offset_rows=$($Workload.Offset)",
+        "-D", "page_size=100",
+        "-D", "anchor_tier=0",
+        "-D", "anchor_surface=0",
+        "-D", "anchor_score=0",
+        "-D", "anchor_epoch_micros=0",
+        "-D", "anchor_id=00000000-0000-0000-0000-000000000000",
+        "-D", "target_id=00000000-0000-0000-0000-000000000000",
+        "-D", "write_id=00000000-0000-0000-0000-000000000001",
+        "-D", "write_sku=PS-D-WRITE-PROBE"
+    )
 
     $BaseArguments = @(
         "exec", "-T",
@@ -1135,10 +1189,7 @@ $AllOutcomes |
 
 $Hashes = foreach ($File in $RequiredFiles) {
     [pscustomobject]@{
-        Path = [System.IO.Path]::GetRelativePath(
-            $RepositoryRoot,
-            $File
-        )
+        Path = $File.Substring($RepositoryRoot.Length).TrimStart('\', '/').Replace('\', '/')
         Sha256 = (
             Get-FileHash -LiteralPath $File -Algorithm SHA256
         ).Hash.ToLowerInvariant()
@@ -1161,6 +1212,36 @@ Write-Host "PostgreSQL selection: $Postgres"
 Write-Host "States attempted: $($States.Count)"
 Write-Host "Evidence: $EvidenceDirectory"
 Write-Host "All isolated benchmark volumes were removed."
+
+$FailedOutcomes = @(
+    $AllOutcomes |
+        Where-Object {
+            $_.Reason -notmatch "^Mandatory smoke passed" -and
+            $_.Reason -notmatch "^Decision evidence captured"
+        }
+)
+
+if ($FailedOutcomes.Count -gt 0) {
+    Write-Host ""
+    Write-Host (
+        "WARNING: $($FailedOutcomes.Count) state run(s) failed " +
+        "with execution errors. The capture still succeeded, but " +
+        "these states have no literal-oracle evidence:"
+    )
+
+    foreach ($failedOutcome in $FailedOutcomes) {
+        Write-Host (
+            "  - $($failedOutcome.PostgresVersion)/" +
+            "$($failedOutcome.State)"
+        )
+    }
+
+    Write-Host (
+        "See <state>/failure.txt under the evidence directory " +
+        "for the first error of each failed state."
+    )
+}
+
 Write-Host (
     "State outcomes remain INCONCLUSIVE until the frozen " +
     "paired decision gates are applied."

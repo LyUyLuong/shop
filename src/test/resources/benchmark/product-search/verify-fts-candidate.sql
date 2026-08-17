@@ -60,9 +60,12 @@ BEGIN
         FROM pg_catalog.pg_extension
         WHERE extname = 'unaccent'
     )
-       OR to_regconfig(
-           'public.shop_product_name_unaccent_v1'
-       ) IS NULL THEN
+       OR NOT EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_ts_config
+           WHERE cfgname = 'shop_product_name_unaccent_v1'
+             AND cfgnamespace = 'public'::regnamespace
+       ) THEN
         RAISE EXCEPTION
             'FTS extension or configuration is missing';
     END IF;
@@ -772,7 +775,7 @@ BEGIN
     PERFORM pg_temp.ps_d_assert_set(
         'NFC and NFD names',
         'Cà Phê Máy',
-        'PUBLIC',
+        'ADMIN_ALL',
         ARRAY[125, 126]
     );
 

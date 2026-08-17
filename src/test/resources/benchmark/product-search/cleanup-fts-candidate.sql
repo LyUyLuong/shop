@@ -33,9 +33,12 @@ BEGIN
         $ddl$;
     END IF;
 
-    IF to_regconfig(
-        'public.shop_product_name_unaccent_v1'
-    ) IS NOT NULL THEN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_ts_config
+        WHERE cfgname = 'shop_product_name_unaccent_v1'
+          AND cfgnamespace = 'public'::regnamespace
+    ) THEN
         EXECUTE $ddl$
             DROP TEXT SEARCH CONFIGURATION
                 public.shop_product_name_unaccent_v1
@@ -119,9 +122,12 @@ BEGIN
         FROM pg_catalog.pg_extension
         WHERE extname = 'unaccent'
     )
-       OR to_regconfig(
-           'public.shop_product_name_unaccent_v1'
-       ) IS NOT NULL
+       OR EXISTS (
+           SELECT 1
+           FROM pg_catalog.pg_ts_config
+           WHERE cfgname = 'shop_product_name_unaccent_v1'
+             AND cfgnamespace = 'public'::regnamespace
+       )
        OR to_regclass(
            'public.idx_products_name_fts_n1_v1'
        ) IS NOT NULL
