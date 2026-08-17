@@ -492,11 +492,11 @@ function Assert-LabState {
     $Results["ccnew-residue"] = Get-LabScalar `
         "SELECT count(*) FROM pg_catalog.pg_class WHERE position('_ccnew' IN relname) > 0;"
     $Results["n1-definition"] = Get-LabScalar `
-        "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_products_name_fts_n1_v1' AND indexdef LIKE '%to_tsvector%' AND indexdef LIKE '%normalize%';"
+        "SELECT count(*) FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid JOIN pg_catalog.pg_am am ON am.oid = c.relam WHERE c.relname = 'idx_products_name_fts_n1_v1' AND am.amname = 'gin' AND i.indisvalid AND i.indisready AND i.indexprs IS NOT NULL;"
     $Results["n2-definition"] = Get-LabScalar `
-        "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_products_name_fts_n2_v1' AND indexdef LIKE '%name_search_vector_v1%';"
+        "SELECT count(*) FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid JOIN pg_catalog.pg_am am ON am.oid = c.relam WHERE c.relname = 'idx_products_name_fts_n2_v1' AND am.amname = 'gin' AND i.indisvalid AND i.indisready AND i.indexprs IS NULL;"
     $Results["sku-definition"] = Get-LabScalar `
-        "SELECT count(*) FROM pg_catalog.pg_indexes WHERE schemaname = 'public' AND indexname = 'idx_products_sku_nfc_prefix_v1' AND indexdef LIKE '%text_pattern_ops%' AND indexdef LIKE '%normalize%';"
+        "SELECT count(*) FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid JOIN pg_catalog.pg_am am ON am.oid = c.relam WHERE c.relname = 'idx_products_sku_nfc_prefix_v1' AND am.amname = 'btree' AND i.indisvalid AND i.indisready AND i.indexprs IS NOT NULL;"
     $Results["bad-owner"] = Get-LabScalar `
         "SELECT count(*) FROM pg_catalog.pg_class c JOIN pg_catalog.pg_roles r ON r.oid = c.relowner WHERE c.relname IN ('idx_products_name_fts_n1_v1','idx_products_name_fts_n2_v1','idx_products_sku_nfc_prefix_v1') AND r.rolname <> 'shop_fts_migration';"
     $Results["n2-column"] = Get-LabScalar `
@@ -1009,12 +1009,6 @@ try {
 
     if ($MigrationSucceeded) {
         try {
-            Assert-LabState `
-                -Database "shop_fts_benchmark" `
-                -OutputFile (
-                    Join-Path $EvidenceDirectory "post-migration-checks.txt"
-                )
-
             $IndexDefinitions = Invoke-Psql `
                 -Database "shop_fts_benchmark" `
                 -Command (
@@ -1037,6 +1031,12 @@ try {
             Write-Utf8File `
                 -Path (Join-Path $EvidenceDirectory "index-definitions.txt") `
                 -Content $IndexDefinitions.Text
+
+            Assert-LabState `
+                -Database "shop_fts_benchmark" `
+                -OutputFile (
+                    Join-Path $EvidenceDirectory "post-migration-checks.txt"
+                )
 
             $TableGrants = Invoke-Psql `
                 -Database "shop_fts_benchmark" `
@@ -1427,7 +1427,8 @@ CREATE INDEX CONCURRENTLY idx_ps_d_ops_failure_v1
                             "WHERE datname = 'shop_fts_failure' " +
                             "AND pid <> pg_backend_pid() " +
                             "AND query LIKE " +
-                            "'CREATE INDEX CONCURRENTLY idx_ps_d_ops_failure_v1%';"
+                            "'CREATE INDEX CONCURRENTLY idx_ps_d_ops_failure_v1%' " +
+                            "ORDER BY pid LIMIT 1;"
                         )
                 ).Text.Trim()
 
@@ -1460,7 +1461,10 @@ CREATE INDEX CONCURRENTLY idx_ps_d_ops_failure_v1
                 Start-Sleep -Milliseconds 100
             }
 
-            for ($wait = 0; $wait -lt 100 -and $CanceledPid; $wait++) {
+            # After the cancel, wait until every matching build backend has
+            # exited. If any remains, cancel each leftover PID explicitly so
+            # the next attempt never observes more than one build backend.
+            for ($wait = 0; $wait -lt 300 -and $CanceledPid; $wait++) {
                 $StillRunning = (
                     Invoke-Psql `
                         -Database "shop_fts_failure" `
@@ -1477,6 +1481,35 @@ CREATE INDEX CONCURRENTLY idx_ps_d_ops_failure_v1
                 }
 
                 Start-Sleep -Milliseconds 100
+            }
+
+            if ($StillRunning -ne "0") {
+                $Leftovers = (
+                    Invoke-Psql `
+                        -Database "shop_fts_failure" `
+                        -Command (
+                            "SELECT pid FROM pg_stat_activity " +
+                            "WHERE datname = 'shop_fts_failure' " +
+                            "AND pid <> pg_backend_pid() " +
+                            "AND query LIKE " +
+                            "'CREATE INDEX CONCURRENTLY idx_ps_d_ops_failure_v1%' " +
+                            "ORDER BY pid;"
+                        )
+                ).Text
+
+                foreach ($leftover in @($Leftovers -split "\r?\n")) {
+                    if ($leftover.Trim()) {
+                        Invoke-Psql `
+                            -Database "shop_fts_failure" `
+                            -Command (
+                                "SELECT pg_cancel_backend($($leftover.Trim()));"
+                            ) `
+                            -AllowFailure |
+                            Out-Null
+                    }
+                }
+
+                Start-Sleep -Seconds 2
             }
 
             $LaunchLog = Invoke-Compose `
@@ -1625,11 +1658,13 @@ CREATE INDEX CONCURRENTLY idx_ps_d_ops_failure_v1
                 Invoke-Psql `
                     -Database "shop_fts_failure" `
                     -Command (
-                        "SELECT count(*) FROM pg_catalog.pg_indexes " +
-                        "WHERE schemaname = 'public' " +
-                        "AND indexname = 'idx_ps_d_ops_failure_v1' " +
-                        "AND indexdef LIKE '%to_tsvector%' " +
-                        "AND indexdef LIKE '%normalize%';"
+                        "SELECT count(*) FROM pg_catalog.pg_index i " +
+                        "JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid " +
+                        "JOIN pg_catalog.pg_am am ON am.oid = c.relam " +
+                        "WHERE c.relname = 'idx_ps_d_ops_failure_v1' " +
+                        "AND am.amname = 'gin' " +
+                        "AND i.indisvalid AND i.indisready " +
+                        "AND i.indexprs IS NOT NULL;"
                     )
             ).Text.Trim()
 
@@ -1831,7 +1866,7 @@ $SummaryLines.Add(
 foreach ($key in $Outcomes.Keys) {
     $SummaryLines.Add("outcome:$key=$($Outcomes[$key])")
 
-    if ($PhaseNotes.ContainsKey($key)) {
+    if ($PhaseNotes.Contains($key)) {
         $SummaryLines.Add("note:$key=$($PhaseNotes[$key])")
     }
 }
