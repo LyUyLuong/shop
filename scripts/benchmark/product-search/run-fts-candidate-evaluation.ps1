@@ -14,6 +14,7 @@ param(
 
     [switch]$SkipTiming,
     [switch]$SkipDeepOffset,
+    [switch]$IncludeWriteProbes,
 
     [switch]$Reset,
     [switch]$AllowDirty
@@ -27,6 +28,13 @@ $States = @("N0", "N0+S", "N1", "N1+S", "N2", "N2+S")
 
 if ($Only) {
     $States = @($Only)
+}
+
+if ($IncludeWriteProbes -and -not $Only) {
+    throw (
+        "Write probes require -Only with an exact survivor state " +
+        "(N1+S or N2+S)."
+    )
 }
 
 if (-not $Reset) {
@@ -570,6 +578,70 @@ function Get-PgbenchMetrics {
 function Get-Workloads {
     $DeepOffset = if ($Rows -eq 10000) { 5000 } else { 50000 }
 
+    $WriteWorkloads = if ($IncludeWriteProbes) {
+        @(
+            [pscustomobject]@{
+                Name = "write-insert"; Browse = 0; Count = 0; Cursor = 0
+                Keyword = "__browse__"; Visibility = "PUBLIC"; Offset = 0
+                Write = 1; Insert = 1; NameUpdate = 0; SkuUpdate = 0
+                StockUpdate = 0; StatusUpdate = 0; ImageUpdate = 0
+                OptimisticConflict = 0; Mixed = 0
+            }
+            [pscustomobject]@{
+                Name = "write-name-update"; Browse = 0; Count = 0; Cursor = 0
+                Keyword = "__browse__"; Visibility = "PUBLIC"; Offset = 0
+                Write = 1; Insert = 0; NameUpdate = 1; SkuUpdate = 0
+                StockUpdate = 0; StatusUpdate = 0; ImageUpdate = 0
+                OptimisticConflict = 0; Mixed = 0
+            }
+            [pscustomobject]@{
+                Name = "write-sku-update"; Browse = 0; Count = 0; Cursor = 0
+                Keyword = "__browse__"; Visibility = "PUBLIC"; Offset = 0
+                Write = 1; Insert = 0; NameUpdate = 0; SkuUpdate = 1
+                StockUpdate = 0; StatusUpdate = 0; ImageUpdate = 0
+                OptimisticConflict = 0; Mixed = 0
+            }
+            [pscustomobject]@{
+                Name = "write-stock-update"; Browse = 0; Count = 0; Cursor = 0
+                Keyword = "__browse__"; Visibility = "PUBLIC"; Offset = 0
+                Write = 1; Insert = 0; NameUpdate = 0; SkuUpdate = 0
+                StockUpdate = 1; StatusUpdate = 0; ImageUpdate = 0
+                OptimisticConflict = 0; Mixed = 0
+            }
+            [pscustomobject]@{
+                Name = "write-status-update"; Browse = 0; Count = 0; Cursor = 0
+                Keyword = "__browse__"; Visibility = "PUBLIC"; Offset = 0
+                Write = 1; Insert = 0; NameUpdate = 0; SkuUpdate = 0
+                StockUpdate = 0; StatusUpdate = 1; ImageUpdate = 0
+                OptimisticConflict = 0; Mixed = 0
+            }
+            [pscustomobject]@{
+                Name = "write-image-update"; Browse = 0; Count = 0; Cursor = 0
+                Keyword = "__browse__"; Visibility = "PUBLIC"; Offset = 0
+                Write = 1; Insert = 0; NameUpdate = 0; SkuUpdate = 0
+                StockUpdate = 0; StatusUpdate = 0; ImageUpdate = 1
+                OptimisticConflict = 0; Mixed = 0
+            }
+            [pscustomobject]@{
+                Name = "write-optimistic-conflict"; Browse = 0; Count = 0; Cursor = 0
+                Keyword = "__browse__"; Visibility = "PUBLIC"; Offset = 0
+                Write = 1; Insert = 0; NameUpdate = 0; SkuUpdate = 0
+                StockUpdate = 0; StatusUpdate = 0; ImageUpdate = 0
+                OptimisticConflict = 1; Mixed = 0
+            }
+            [pscustomobject]@{
+                Name = "mixed-read-write"; Browse = 0; Count = 0; Cursor = 0
+                Keyword = "precision camera"; Visibility = "PUBLIC"; Offset = 0
+                Write = 1; Insert = 1; NameUpdate = 0; SkuUpdate = 0
+                StockUpdate = 0; StatusUpdate = 0; ImageUpdate = 0
+                OptimisticConflict = 0; Mixed = 1
+            }
+        )
+    }
+    else {
+        @()
+    }
+
     @(
         [pscustomobject]@{
             Name = "browse-data"; Browse = 1; Count = 0
@@ -641,7 +713,7 @@ function Get-Workloads {
             Cursor = 0; Keyword = "common market"
             Visibility = "PUBLIC"; Offset = $DeepOffset
         }
-    )
+    ) + $WriteWorkloads
 }
 
 function Get-CommonVariables {
@@ -651,14 +723,14 @@ function Get-CommonVariables {
         "is_browse=$($Workload.Browse)"
         "is_count=$($Workload.Count)"
         "is_cursor=$($Workload.Cursor)"
-        "is_write=0"
-        "is_insert=0"
-        "is_name_update=0"
-        "is_sku_update=0"
-        "is_stock_update=0"
-        "is_status_update=0"
-        "is_image_update=0"
-        "is_optimistic_conflict=0"
+        "is_write=$(if ($Workload.Write) { 1 } else { 0 })"
+        "is_insert=$(if ($Workload.Insert) { 1 } else { 0 })"
+        "is_name_update=$(if ($Workload.NameUpdate) { 1 } else { 0 })"
+        "is_sku_update=$(if ($Workload.SkuUpdate) { 1 } else { 0 })"
+        "is_stock_update=$(if ($Workload.StockUpdate) { 1 } else { 0 })"
+        "is_status_update=$(if ($Workload.StatusUpdate) { 1 } else { 0 })"
+        "is_image_update=$(if ($Workload.ImageUpdate) { 1 } else { 0 })"
+        "is_optimistic_conflict=$(if ($Workload.OptimisticConflict) { 1 } else { 0 })"
         "keyword=$($Workload.Keyword)"
         "visibility=$($Workload.Visibility)"
         "minimum_price=0"
@@ -752,14 +824,14 @@ function Invoke-PgbenchWorkload {
         "-D", "is_browse=$($Workload.Browse -eq 1)",
         "-D", "is_count=$($Workload.Count -eq 1)",
         "-D", "is_cursor=$($Workload.Cursor -eq 1)",
-        "-D", "is_write=False",
-        "-D", "is_insert=False",
-        "-D", "is_name_update=False",
-        "-D", "is_sku_update=False",
-        "-D", "is_stock_update=False",
-        "-D", "is_status_update=False",
-        "-D", "is_image_update=False",
-        "-D", "is_optimistic_conflict=False",
+        "-D", "is_write=$($Workload.Write -eq 1)",
+        "-D", "is_insert=$($Workload.Insert -eq 1)",
+        "-D", "is_name_update=$($Workload.NameUpdate -eq 1)",
+        "-D", "is_sku_update=$($Workload.SkuUpdate -eq 1)",
+        "-D", "is_stock_update=$($Workload.StockUpdate -eq 1)",
+        "-D", "is_status_update=$($Workload.StatusUpdate -eq 1)",
+        "-D", "is_image_update=$($Workload.ImageUpdate -eq 1)",
+        "-D", "is_optimistic_conflict=$($Workload.OptimisticConflict -eq 1)",
         "-D", "keyword=$($Workload.Keyword)",
         "-D", "visibility=$($Workload.Visibility)",
         "-D", "minimum_price=0",
@@ -865,6 +937,139 @@ function Invoke-PgbenchWorkload {
     [pscustomobject]@{
         State = $State
         Workload = $Workload.Name
+        Clients = $Clients
+        Round = $Round
+        Samples = $Metrics.Samples
+        P50Ms = $Metrics.P50Ms
+        P95Ms = $Metrics.P95Ms
+        P99Ms = $Metrics.P99Ms
+        AverageMs = $Metrics.AverageMs
+    }
+}
+
+function Invoke-MixedPgbenchWorkload {
+    param(
+        [Parameter(Mandatory)][string]$State,
+        [Parameter(Mandatory)][string]$RenderedReadFile,
+        [Parameter(Mandatory)][string]$RenderedWriteFile,
+        [Parameter(Mandatory)][int]$Clients,
+        [Parameter(Mandatory)][int]$Round,
+        [Parameter(Mandatory)][string]$RawDirectory
+    )
+
+    # Mixed readers/writers: the read script carries weight 7 and the
+    # write script weight 1. Both scripts share one variable set; each
+    # script fixes its own is_write branch through a leading \set line
+    # that the runner prepended when rendering the copies.
+    $WarmupTotal = if ($Rows -eq 10000) { 8 } else { 24 }
+    $MeasuredTotal = if ($Rows -eq 10000) { 16 } else { 104 }
+    $WarmupPerClient = [int]($WarmupTotal / $Clients)
+    $MeasuredPerClient = [int]($MeasuredTotal / $Clients)
+
+    $MixedVariables = @(
+        "-D", "is_browse=False",
+        "-D", "is_count=False",
+        "-D", "is_cursor=False",
+        "-D", "keyword=precision camera",
+        "-D", "visibility=PUBLIC",
+        "-D", "minimum_price=0",
+        "-D", "maximum_price=0",
+        "-D", "has_minimum_price=False",
+        "-D", "has_maximum_price=False",
+        "-D", "offset_rows=0",
+        "-D", "page_size=100",
+        "-D", "anchor_tier=0",
+        "-D", "anchor_surface=0",
+        "-D", "anchor_score=0",
+        "-D", "anchor_epoch_micros=0",
+        "-D", "anchor_id=00000000-0000-0000-0000-000000000000",
+        "-D", "target_id=00000000-0000-0000-0000-000000000000",
+        "-D", "write_id=00000000-0000-0000-0000-000000000001",
+        "-D", "write_sku=PS-D-WRITE-PROBE"
+    )
+
+    $BaseArguments = @(
+        "exec", "-T",
+        "-e",
+        (
+            "PGOPTIONS=-c role=shop_fts_runtime " +
+            "-c statement_timeout=30000"
+        ),
+        "postgres", "pgbench",
+        "-n", "-M", "prepared",
+        "-c", "$Clients",
+        "-j", "$Clients",
+        "-r",
+        "--failures-detailed",
+        "--verbose-errors"
+    ) + $MixedVariables + @(
+        "-U", "shop_fts_migration",
+        "-f", "${RenderedReadFile}@7",
+        "-f", "${RenderedWriteFile}@1",
+        "shop_fts_benchmark"
+    )
+
+    $Warmup = Invoke-Compose -Arguments (
+        $BaseArguments[0..10] +
+        @("-t", "$WarmupPerClient") +
+        $BaseArguments[11..($BaseArguments.Count - 1)]
+    )
+
+    $SafeState = $State.Replace("+", "s").ToLowerInvariant()
+    $Prefix = "/tmp/psd-$SafeState-mixedrw-r$Round"
+
+    Invoke-Compose `
+        -Arguments @(
+            "exec", "-T", "postgres",
+            "sh", "-lc", "rm -f $Prefix.*"
+        ) |
+        Out-Null
+
+    $MeasuredArguments = (
+        $BaseArguments[0..10] +
+        @(
+            "-t", "$MeasuredPerClient",
+            "-l",
+            "--log-prefix=$Prefix"
+        ) +
+        $BaseArguments[11..($BaseArguments.Count - 1)]
+    )
+
+    $Measured = Invoke-Compose -Arguments $MeasuredArguments
+
+    $Logs = Invoke-Compose -Arguments @(
+        "exec", "-T", "postgres",
+        "sh", "-lc", "cat $Prefix.*"
+    )
+
+    Invoke-Compose `
+        -Arguments @(
+            "exec", "-T", "postgres",
+            "sh", "-lc", "rm -f $Prefix.*"
+        ) |
+        Out-Null
+
+    $RawBase = "$SafeState-mixed-read-write-c$Clients-r$Round"
+
+    Write-Utf8File `
+        -Path (Join-Path $RawDirectory "$RawBase-warmup.txt") `
+        -Content $Warmup.Text
+
+    Write-Utf8File `
+        -Path (Join-Path $RawDirectory "$RawBase-pgbench.txt") `
+        -Content $Measured.Text
+
+    Write-Utf8File `
+        -Path (Join-Path $RawDirectory "$RawBase-transactions.txt") `
+        -Content $Logs.Text
+
+    $Metrics = Get-PgbenchMetrics `
+        -LogLines $Logs.Output `
+        -ExpectedTransactions $MeasuredTotal
+
+    [pscustomobject]@{
+        State = $State
+        Workload = "mixed-read-write"
         Clients = $Clients
         Round = $Round
         Samples = $Metrics.Samples
@@ -1062,9 +1267,56 @@ try {
                         -LocalPath $RenderedBenchmark `
                         -ContainerPath $ContainerBenchmark
 
+                    $ContainerMixedRead = "/tmp/psd-mixed-read-$SafeState.sql"
+                    $ContainerMixedWrite = "/tmp/psd-mixed-write-$SafeState.sql"
+
+                    if ($IncludeWriteProbes) {
+                        $MixedRead = (
+                            "\set is_write 0" +
+                            [Environment]::NewLine +
+                            [System.IO.File]::ReadAllText($RenderedBenchmark)
+                        )
+
+                        $MixedWrite = (
+                            "\set is_write 1" +
+                            [Environment]::NewLine +
+                            "\set is_insert 1" +
+                            [Environment]::NewLine +
+                            [System.IO.File]::ReadAllText($RenderedBenchmark)
+                        )
+
+                        $MixedReadPath = Join-Path `
+                            $StateDirectory `
+                            "benchmark-mixed-read.sql"
+
+                        $MixedWritePath = Join-Path `
+                            $StateDirectory `
+                            "benchmark-mixed-write.sql"
+
+                        Write-Utf8File `
+                            -Path $MixedReadPath `
+                            -Content $MixedRead
+
+                        Write-Utf8File `
+                            -Path $MixedWritePath `
+                            -Content $MixedWrite
+
+                        Copy-RenderedFile `
+                            -LocalPath $MixedReadPath `
+                            -ContainerPath $ContainerMixedRead
+
+                        Copy-RenderedFile `
+                            -LocalPath $MixedWritePath `
+                            -ContainerPath $ContainerMixedWrite
+                    }
+
                     $Workloads = @(Get-Workloads)
 
                     foreach ($Workload in $Workloads) {
+                        if ($Workload.Name -eq "mixed-read-write") {
+                            continue
+                        }
+
                         $Plan = Invoke-ExplainWorkload `
                             -Workload $Workload `
                             -State $State `
@@ -1090,6 +1342,32 @@ try {
                                 $SkipDeepOffset -and
                                 $Workload.Name -eq "deep-offset"
                             ) {
+                                continue
+                            }
+
+                            if ($Workload.Name -eq "mixed-read-write") {
+                                for (
+                                    $Round = 1;
+                                    $Round -le $Rounds;
+                                    $Round++
+                                ) {
+                                    $MixedMetric =
+                                        Invoke-MixedPgbenchWorkload `
+                                            -State $State `
+                                            -RenderedReadFile $ContainerMixedRead `
+                                            -RenderedWriteFile $ContainerMixedWrite `
+                                            -Clients 8 `
+                                            -Round $Round `
+                                            -RawDirectory $RawDirectory
+
+                                    $MixedMetric |
+                                        Add-Member `
+                                            -NotePropertyName PostgresVersion `
+                                            -NotePropertyValue $VersionSpec.Version
+
+                                    $AllMetrics.Add($MixedMetric)
+                                }
+
                                 continue
                             }
 
