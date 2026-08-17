@@ -575,6 +575,21 @@ function Get-PgbenchMetrics {
     }
 }
 
+function Get-WorkloadFlag {
+    param(
+        [Parameter(Mandatory)][object]$Workload,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    $Property = $Workload.PSObject.Properties[$Name]
+
+    if ($null -ne $Property -and $Property.Value) {
+        return 1
+    }
+
+    return 0
+}
+
 function Get-Workloads {
     $DeepOffset = if ($Rows -eq 10000) { 5000 } else { 50000 }
 
@@ -723,14 +738,14 @@ function Get-CommonVariables {
         "is_browse=$($Workload.Browse)"
         "is_count=$($Workload.Count)"
         "is_cursor=$($Workload.Cursor)"
-        "is_write=$(if ($Workload.Write) { 1 } else { 0 })"
-        "is_insert=$(if ($Workload.Insert) { 1 } else { 0 })"
-        "is_name_update=$(if ($Workload.NameUpdate) { 1 } else { 0 })"
-        "is_sku_update=$(if ($Workload.SkuUpdate) { 1 } else { 0 })"
-        "is_stock_update=$(if ($Workload.StockUpdate) { 1 } else { 0 })"
-        "is_status_update=$(if ($Workload.StatusUpdate) { 1 } else { 0 })"
-        "is_image_update=$(if ($Workload.ImageUpdate) { 1 } else { 0 })"
-        "is_optimistic_conflict=$(if ($Workload.OptimisticConflict) { 1 } else { 0 })"
+        "is_write=$(Get-WorkloadFlag -Workload $Workload -Name 'Write')"
+        "is_insert=$(Get-WorkloadFlag -Workload $Workload -Name 'Insert')"
+        "is_name_update=$(Get-WorkloadFlag -Workload $Workload -Name 'NameUpdate')"
+        "is_sku_update=$(Get-WorkloadFlag -Workload $Workload -Name 'SkuUpdate')"
+        "is_stock_update=$(Get-WorkloadFlag -Workload $Workload -Name 'StockUpdate')"
+        "is_status_update=$(Get-WorkloadFlag -Workload $Workload -Name 'StatusUpdate')"
+        "is_image_update=$(Get-WorkloadFlag -Workload $Workload -Name 'ImageUpdate')"
+        "is_optimistic_conflict=$(Get-WorkloadFlag -Workload $Workload -Name 'OptimisticConflict')"
         "keyword=$($Workload.Keyword)"
         "visibility=$($Workload.Visibility)"
         "minimum_price=0"
@@ -744,7 +759,7 @@ function Get-CommonVariables {
         "anchor_score=0"
         "anchor_epoch_micros=0"
         "anchor_id=00000000-0000-0000-0000-000000000000"
-        "target_id=00000000-0000-0000-0000-000000000000"
+        "target_id=0f3cbcee-790e-9ed0-354b-96548cbd4d09"
         "write_id=00000000-0000-0000-0000-000000000001"
         "write_sku=PS-D-WRITE-PROBE"
     )
@@ -824,14 +839,14 @@ function Invoke-PgbenchWorkload {
         "-D", "is_browse=$($Workload.Browse -eq 1)",
         "-D", "is_count=$($Workload.Count -eq 1)",
         "-D", "is_cursor=$($Workload.Cursor -eq 1)",
-        "-D", "is_write=$($Workload.Write -eq 1)",
-        "-D", "is_insert=$($Workload.Insert -eq 1)",
-        "-D", "is_name_update=$($Workload.NameUpdate -eq 1)",
-        "-D", "is_sku_update=$($Workload.SkuUpdate -eq 1)",
-        "-D", "is_stock_update=$($Workload.StockUpdate -eq 1)",
-        "-D", "is_status_update=$($Workload.StatusUpdate -eq 1)",
-        "-D", "is_image_update=$($Workload.ImageUpdate -eq 1)",
-        "-D", "is_optimistic_conflict=$($Workload.OptimisticConflict -eq 1)",
+        "-D", "is_write=$((Get-WorkloadFlag -Workload $Workload -Name 'Write') -eq 1)",
+        "-D", "is_insert=$((Get-WorkloadFlag -Workload $Workload -Name 'Insert') -eq 1)",
+        "-D", "is_name_update=$((Get-WorkloadFlag -Workload $Workload -Name 'NameUpdate') -eq 1)",
+        "-D", "is_sku_update=$((Get-WorkloadFlag -Workload $Workload -Name 'SkuUpdate') -eq 1)",
+        "-D", "is_stock_update=$((Get-WorkloadFlag -Workload $Workload -Name 'StockUpdate') -eq 1)",
+        "-D", "is_status_update=$((Get-WorkloadFlag -Workload $Workload -Name 'StatusUpdate') -eq 1)",
+        "-D", "is_image_update=$((Get-WorkloadFlag -Workload $Workload -Name 'ImageUpdate') -eq 1)",
+        "-D", "is_optimistic_conflict=$((Get-WorkloadFlag -Workload $Workload -Name 'OptimisticConflict') -eq 1)",
         "-D", "keyword=$($Workload.Keyword)",
         "-D", "visibility=$($Workload.Visibility)",
         "-D", "minimum_price=0",
@@ -845,7 +860,7 @@ function Invoke-PgbenchWorkload {
         "-D", "anchor_score=0",
         "-D", "anchor_epoch_micros=0",
         "-D", "anchor_id=00000000-0000-0000-0000-000000000000",
-        "-D", "target_id=00000000-0000-0000-0000-000000000000",
+        "-D", "target_id=0f3cbcee-790e-9ed0-354b-96548cbd4d09",
         "-D", "write_id=00000000-0000-0000-0000-000000000001",
         "-D", "write_sku=PS-D-WRITE-PROBE"
     )
@@ -983,7 +998,7 @@ function Invoke-MixedPgbenchWorkload {
         "-D", "anchor_score=0",
         "-D", "anchor_epoch_micros=0",
         "-D", "anchor_id=00000000-0000-0000-0000-000000000000",
-        "-D", "target_id=00000000-0000-0000-0000-000000000000",
+        "-D", "target_id=0f3cbcee-790e-9ed0-354b-96548cbd4d09",
         "-D", "write_id=00000000-0000-0000-0000-000000000001",
         "-D", "write_sku=PS-D-WRITE-PROBE"
     )
