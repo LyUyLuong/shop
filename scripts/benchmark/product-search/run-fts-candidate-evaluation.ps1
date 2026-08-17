@@ -12,6 +12,8 @@ param(
     [ValidateSet("N0", "N0+S", "N1", "N1+S", "N2", "N2+S")]
     [string]$Only,
 
+    [switch]$SkipTiming,
+
     [switch]$Reset,
     [switch]$AllowDirty
 )
@@ -948,6 +950,7 @@ try {
                 Out-Null
 
             Wait-Postgres
+            Write-Host "[progress] PostgreSQL $($VersionSpec.Version): preparing pristine database..."
             Initialize-PristineDatabase
 
             $Identity = Invoke-Compose -Arguments @(
@@ -967,6 +970,12 @@ try {
                 -Content $Identity.Text
 
             foreach ($State in $States) {
+                Write-Host (
+                    "[progress] PostgreSQL $($VersionSpec.Version) " +
+                    "state ${State}: started at " +
+                    ([DateTime]::Now.ToString("HH:mm:ss"))
+                )
+
                 $SafeState = $State.Replace(
                     "+",
                     "s"
@@ -1072,29 +1081,31 @@ try {
                         $AllPlans.Add($Plan)
                     }
 
-                    $Rounds = if ($Rows -eq 10000) { 1 } else { 3 }
+                    if (-not $SkipTiming) {
+                        $Rounds = if ($Rows -eq 10000) { 1 } else { 3 }
 
-                    foreach ($Workload in $Workloads) {
-                        foreach ($Clients in @(1, 8)) {
-                            for (
-                                $Round = 1;
-                                $Round -le $Rounds;
-                                $Round++
-                            ) {
-                                $Metric = Invoke-PgbenchWorkload `
-                                    -Workload $Workload `
-                                    -State $State `
-                                    -RenderedFile $ContainerBenchmark `
-                                    -Clients $Clients `
-                                    -Round $Round `
-                                    -RawDirectory $RawDirectory
+                        foreach ($Workload in $Workloads) {
+                            foreach ($Clients in @(1, 8)) {
+                                for (
+                                    $Round = 1;
+                                    $Round -le $Rounds;
+                                    $Round++
+                                ) {
+                                    $Metric = Invoke-PgbenchWorkload `
+                                        -Workload $Workload `
+                                        -State $State `
+                                        -RenderedFile $ContainerBenchmark `
+                                        -Clients $Clients `
+                                        -Round $Round `
+                                        -RawDirectory $RawDirectory
 
-                                $Metric |
-                                    Add-Member `
-                                        -NotePropertyName PostgresVersion `
-                                        -NotePropertyValue $VersionSpec.Version
+                                    $Metric |
+                                        Add-Member `
+                                            -NotePropertyName PostgresVersion `
+                                            -NotePropertyValue $VersionSpec.Version
 
-                                $AllMetrics.Add($Metric)
+                                    $AllMetrics.Add($Metric)
+                                }
                             }
                         }
                     }
@@ -1104,6 +1115,14 @@ try {
                         $Reason = (
                             "Mandatory smoke passed; " +
                             "100k decision evidence remains."
+                        )
+                    }
+                    elseif ($SkipTiming) {
+                        $Outcome = "INCONCLUSIVE"
+                        $Reason = (
+                            "Correctness and plan gates captured at 100k; " +
+                            "repeated timing skipped by -SkipTiming; " +
+                            "survivor selection and survivor timing remain."
                         )
                     }
                     else {
@@ -1204,11 +1223,26 @@ $Hashes |
             -Content $_
     }
 
+if ($SkipTiming) {
+    Write-Utf8File `
+        -Path (Join-Path $EvidenceDirectory "timing-skipped.txt") `
+        -Content (
+            "Repeated pgbench timing was skipped by -SkipTiming. " +
+            "Only correctness and plan gates ran. Survivor timing " +
+            "must run separately with -Only <state>."
+        )
+}
+
 Write-Host ""
 Write-Host "PS-D candidate evaluation capture succeeded."
 Write-Host "Rows: $Rows"
 Write-Host "Mode: $Mode"
 Write-Host "PostgreSQL selection: $Postgres"
+
+if ($SkipTiming) {
+    Write-Host "Timing: SKIPPED (correctness and plan gates only)"
+}
+
 Write-Host "States attempted: $($States.Count)"
 Write-Host "Evidence: $EvidenceDirectory"
 Write-Host "All isolated benchmark volumes were removed."
