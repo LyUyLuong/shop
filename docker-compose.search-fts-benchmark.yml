@@ -1,0 +1,41 @@
+name: shop-product-search-fts-benchmark
+
+services:
+  postgres:
+    image: ${PS_D_POSTGRES_IMAGE:?PS_D_POSTGRES_IMAGE must be set}
+    environment:
+      POSTGRES_DB: shop_fts_benchmark
+      POSTGRES_USER: shop_fts_migration
+      POSTGRES_PASSWORD: shop_fts_benchmark
+    ports:
+      - "127.0.0.1:${PS_D_POSTGRES_PORT:?PS_D_POSTGRES_PORT must be set}:5432"
+    volumes:
+      - product-search-fts-postgres-data:/var/lib/postgresql/data
+      - ./src/main/resources/db/migration:/production-migrations:ro
+      - ./src/test/resources/benchmark/product-search:/benchmark:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  flyway:
+    image: flyway/flyway:11.7.2-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./src/main/resources/db/migration:/flyway/production:ro
+      - ./src/test/resources/benchmark/product-search:/benchmark:ro
+    command: >-
+      -url=jdbc:postgresql://postgres:5432/shop_fts_benchmark
+      -user=shop_fts_migration
+      -password=shop_fts_benchmark
+      -locations=filesystem:/flyway/production
+      -connectRetries=60
+      -validateMigrationNaming=true
+      migrate
+
+volumes:
+  product-search-fts-postgres-data:
