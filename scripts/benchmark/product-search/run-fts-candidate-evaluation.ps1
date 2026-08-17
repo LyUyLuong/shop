@@ -13,6 +13,7 @@ param(
     [string]$Only,
 
     [switch]$SkipTiming,
+    [switch]$SkipDeepOffset,
 
     [switch]$Reset,
     [switch]$AllowDirty
@@ -1085,6 +1086,13 @@ try {
                         $Rounds = if ($Rows -eq 10000) { 1 } else { 3 }
 
                         foreach ($Workload in $Workloads) {
+                            if (
+                                $SkipDeepOffset -and
+                                $Workload.Name -eq "deep-offset"
+                            ) {
+                                continue
+                            }
+
                             foreach ($Clients in @(1, 8)) {
                                 for (
                                     $Round = 1;
@@ -1233,6 +1241,16 @@ if ($SkipTiming) {
         )
 }
 
+if ($SkipDeepOffset) {
+    Write-Utf8File `
+        -Path (Join-Path $EvidenceDirectory "deep-offset-timing-skipped.txt") `
+        -Content (
+            "The deep-offset workload was excluded from repeated timing " +
+            "by -SkipDeepOffset (amendment PS-D-D07-EXEC-1). Its EXPLAIN " +
+            "plan capture remains. See decision.md."
+        )
+}
+
 Write-Host ""
 Write-Host "PS-D candidate evaluation capture succeeded."
 Write-Host "Rows: $Rows"
@@ -1241,6 +1259,10 @@ Write-Host "PostgreSQL selection: $Postgres"
 
 if ($SkipTiming) {
     Write-Host "Timing: SKIPPED (correctness and plan gates only)"
+}
+
+if ($SkipDeepOffset) {
+    Write-Host "Deep-offset timing: SKIPPED (amendment PS-D-D07-EXEC-1)"
 }
 
 Write-Host "States attempted: $($States.Count)"
