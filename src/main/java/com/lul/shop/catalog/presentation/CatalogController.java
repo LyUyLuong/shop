@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 public class CatalogController {
 
     private static final int MAX_PAGE_SIZE = 100;
+    private static final int MAX_KEYWORD_LENGTH = 100;
 
     private final CatalogService catalogService;
 
@@ -53,6 +54,8 @@ public class CatalogController {
             @RequestParam(defaultValue = "20")
             int size
     ) {
+        validateKeyword(keyword);
+
         PageResult<ProductResponse> result =
                 catalogService
                         .searchActiveProducts(
@@ -74,6 +77,8 @@ public class CatalogController {
             @RequestParam(defaultValue = "20")
             int size
     ) {
+        validateKeyword(keyword);
+
         ProductCursorPageResult result =
                 catalogService
                         .searchActiveProductsByCursor(
@@ -196,6 +201,8 @@ public class CatalogController {
             @RequestParam(defaultValue = "20")
             int size
     ) {
+        validateKeyword(keyword);
+
         ProductSearchCriteria criteria =
                 ProductSearchCriteria.withStatus(
                         keyword,
@@ -226,6 +233,8 @@ public class CatalogController {
             @RequestParam(defaultValue = "20")
             int size
     ) {
+        validateKeyword(keyword);
+
         ProductSearchCriteria criteria =
                 ProductSearchCriteria.withStatus(
                         keyword,
@@ -305,6 +314,20 @@ public class CatalogController {
         }
 
         return Math.min(size, MAX_PAGE_SIZE);
+    }
+
+    private void validateKeyword(String keyword) {
+        if (
+                keyword != null
+                        && keyword.trim().length() > MAX_KEYWORD_LENGTH
+        ) {
+            throw new BusinessException(
+                    CatalogErrorCode.INVALID_PRODUCT_SEARCH_KEYWORD,
+                    "keyword must be <= "
+                            + MAX_KEYWORD_LENGTH
+                            + " characters"
+            );
+        }
     }
 
     private UploadProductImageCommand
