@@ -197,25 +197,24 @@ class CustomerOwnershipContractTest {
     }
 
     @Test
-    void shouldGetBoundedOrderPageForJwtSubject() {
+    void shouldGetFixedSizeOrderPageForJwtSubject() {
         RuntimeException probe = probe();
 
         when(orderingService.getOrderPage(
                 USER_ID,
-                new PageQuery(2, 100)
+                new PageQuery(2, 20)
         )).thenThrow(probe);
 
         assertThatThrownBy(() ->
                 orderingController.getOrderPage(
                         jwt(),
-                        2,
-                        500
+                        2
                 )
         ).isSameAs(probe);
 
         verify(orderingService).getOrderPage(
                 USER_ID,
-                new PageQuery(2, 100)
+                new PageQuery(2, 20)
         );
     }
 

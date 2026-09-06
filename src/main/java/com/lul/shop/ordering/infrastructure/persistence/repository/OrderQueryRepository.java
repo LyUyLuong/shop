@@ -8,6 +8,8 @@ import com.lul.shop.ordering.domain.OrderSummary;
 import com.lul.shop.ordering.infrastructure.persistence.entity.OrderJpaEntity;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
+import com.lul.shop.shared.exception.BusinessException;
+import com.lul.shop.shared.exception.CommonErrorCode;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Tuple;
@@ -36,6 +38,10 @@ public class OrderQueryRepository {
         Objects.requireNonNull(criteria, "criteria must not be null");
         Objects.requireNonNull(pageQuery, "pageQuery must not be null");
 
+        int page = pageQuery.page();
+        int size = pageQuery.size();
+        int offset = calculateOffset(page, size);
+
         Map<String, Object> params = new HashMap<>();
         String whereClause = buildWhereClause(criteria, params);
 
@@ -43,7 +49,7 @@ public class OrderQueryRepository {
                 select o.id
                 from OrderJpaEntity o
                 """ + whereClause + """
-                order by o.createdAt desc
+                order by o.createdAt desc, o.id desc
                 """;
 
         String countJpql = """
@@ -57,17 +63,14 @@ public class OrderQueryRepository {
         applyParams(idQuery, params);
         applyParams(countQuery, params);
 
-        int page = pageQuery.page();
-        int size = pageQuery.size();
-
         List<UUID> orderIds = idQuery
-                .setFirstResult(page * size)
+                .setFirstResult(offset)
                 .setMaxResults(size)
                 .getResultList();
 
         long totalElements = countQuery.getSingleResult();
-        int totalPages = (int) Math.ceil((double) totalElements / size);
-        boolean hasNext = page + 1 < totalPages;
+        int totalPages = calculateTotalPages(totalElements, size);
+        boolean hasNext = (long) page + 1 < totalPages;
 
         if (orderIds.isEmpty()) {
             return new PageResult<>(List.of(), page, size, totalElements, totalPages, hasNext);
@@ -230,7 +233,8 @@ public class OrderQueryRepository {
         long offset = (long) page * size;
 
         if (offset > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException(
+            throw new BusinessException(
+                    CommonErrorCode.INVALID_REQUEST,
                     "page offset is too large"
             );
         }

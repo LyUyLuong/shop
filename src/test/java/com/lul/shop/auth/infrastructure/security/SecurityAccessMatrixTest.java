@@ -28,6 +28,7 @@ import com.lul.shop.shared.config.WebConfig;
 import com.lul.shop.shared.domain.PageQuery;
 import com.lul.shop.shared.domain.PageResult;
 import com.lul.shop.shared.exception.GlobalExceptionHandler;
+import com.lul.shop.shared.exception.CommonErrorCode;
 import com.lul.shop.shared.exception.BusinessException;
 import com.lul.shop.payment.application.PaymentService;
 import com.lul.shop.payment.presentation.PaymentController;
@@ -40,6 +41,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -431,31 +434,119 @@ class SecurityAccessMatrixTest {
         );
     }
 
-    @Test
-    void shouldRejectInvalidCustomerOrderPageSize()
+    @ParameterizedTest
+    @ValueSource(strings = {"20", "0", "-1", "1000", "abc"})
+    void shouldIgnoreCustomerSizeAndUseServerPageSize(String suppliedSize)
             throws Exception {
+        PageResult<CustomerOrderSummaryResult> result =
+                new PageResult<>(List.of(), 2, 20, 0, 0, false);
+        when(orderingService.getOrderPage(USER_ID, new PageQuery(2, 20)))
+                .thenReturn(result);
 
-        mockMvc.perform(
-                        get("/api/v1/orders/page")
-                                .param("size", "0")
-                                .with(jwt()
-                                        .jwt(builder ->
-                                                builder.subject(
-                                                        USER_ID.toString()
-                                                )
-                                        )
-                                        .authorities(
-                                                USER_AUTHORITY
-                                        )
-                                )
-                )
+        mockMvc.perform(get("/api/v1/orders/page")
+                        .param("page", "2")
+                        .param("size", suppliedSize)
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(USER_ID.toString()))
+                                .authorities(USER_AUTHORITY)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(2))
+                .andExpect(jsonPath("$.data.size").value(20));
+
+        verify(orderingService).getOrderPage(USER_ID, new PageQuery(2, 20));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"50,50", "101,100", "1000,100"})
+    void shouldAllowAdminSizeWithinExistingCap(int requestedSize, int effectiveSize)
+            throws Exception {
+        PageResult<AdminOrderSummaryResult> result =
+                new PageResult<>(List.of(), 2, effectiveSize, 0, 0, false);
+        when(orderOperationsService.searchOrders(
+                any(OrderSearchCriteria.class),
+                eq(new PageQuery(2, effectiveSize))))
+                .thenReturn(result);
+
+        mockMvc.perform(get("/api/v1/admin/orders")
+                        .param("page", "2")
+                        .param("size", Integer.toString(requestedSize))
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(USER_ID.toString()))
+                                .authorities(ADMIN_AUTHORITY)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(2))
+                .andExpect(jsonPath("$.data.size").value(effectiveSize));
+
+        verify(orderOperationsService).searchOrders(
+                any(OrderSearchCriteria.class),
+                eq(new PageQuery(2, effectiveSize)));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"/api/v1/orders/page", "/api/v1/admin/orders"})
+    void shouldRejectNegativeOrderPage(String endpoint) throws Exception {
+        mockMvc.perform(get(endpoint)
+                        .param("page", "-1")
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(USER_ID.toString()))
+                                .authorities(ADMIN_AUTHORITY)))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success")
-                        .value(false))
-                .andExpect(jsonPath("$.error.code")
-                        .value("COMMON_005"));
+                .andExpect(jsonPath("$.error.code").value("COMMON_005"));
 
-        verifyNoInteractions(orderingService);
+        verifyNoInteractions(orderingService, orderOperationsService);
+    }
+
+    @Test
+    void shouldStillRejectInvalidAdminPageSize() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/orders")
+                        .param("size", "0")
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(USER_ID.toString()))
+                                .authorities(ADMIN_AUTHORITY)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_005"));
+
+        verifyNoInteractions(orderOperationsService);
+    }
+
+    @Test
+    void shouldMapAdminOffsetFailureToBadRequest() throws Exception {
+        when(orderOperationsService.searchOrders(
+                any(OrderSearchCriteria.class),
+                eq(new PageQuery(1073741824, 4))))
+                .thenThrow(new BusinessException(
+                        CommonErrorCode.INVALID_REQUEST,
+                        "page offset is too large"));
+
+        mockMvc.perform(get("/api/v1/admin/orders")
+                        .param("page", "1073741824")
+                        .param("size", "4")
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(USER_ID.toString()))
+                                .authorities(ADMIN_AUTHORITY)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.error.code").value("COMMON_005"))
+                .andExpect(jsonPath("$.error.message").value("Invalid request: page offset is too large"));
+    }
+
+    @Test
+    void shouldMapCustomerOffsetFailureUsingFixedSize() throws Exception {
+        when(orderingService.getOrderPage(USER_ID, new PageQuery(107374183, 20)))
+                .thenThrow(new BusinessException(
+                        CommonErrorCode.INVALID_REQUEST,
+                        "page offset is too large"));
+
+        mockMvc.perform(get("/api/v1/orders/page")
+                        .param("page", "107374183")
+                        .param("size", "1")
+                        .with(jwt()
+                                .jwt(builder -> builder.subject(USER_ID.toString()))
+                                .authorities(USER_AUTHORITY)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("COMMON_005"));
+
+        verify(orderingService).getOrderPage(USER_ID, new PageQuery(107374183, 20));
     }
 
     @ParameterizedTest(name = "USER cannot access {0}")

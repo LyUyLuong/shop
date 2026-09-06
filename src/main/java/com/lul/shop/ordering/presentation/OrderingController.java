@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit;
 @RequestMapping("/orders")
 public class OrderingController {
 
-    private static final int MAX_PAGE_SIZE = 100;
+    private static final int CUSTOMER_PAGE_SIZE = 20;
 
     private final OrderingService orderingService;
     private final OrderItemImageService orderItemImageService;
@@ -95,13 +95,12 @@ public class OrderingController {
     public ApiResponse<PageResponse<CustomerOrderSummaryResponse>>
     getOrderPage(
             @AuthenticationPrincipal Jwt jwt,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size
+            @RequestParam(defaultValue = "0") int page
     ) {
         PageResult<CustomerOrderSummaryResult> result =
                 orderingService.getOrderPage(
                         currentUserId(jwt),
-                        toPageQuery(page, size)
+                        new PageQuery(page, CUSTOMER_PAGE_SIZE)
                 );
 
         return ApiResponse.ok(
@@ -140,13 +139,6 @@ public class OrderingController {
                 .contentLength(image.contentLength())
                 .cacheControl(CacheControl.maxAge(1, TimeUnit.HOURS).cachePrivate())
                 .body(new InputStreamResource(image.content()));
-    }
-
-    private PageQuery toPageQuery(int page, int size) {
-        return new PageQuery(
-                page,
-                Math.min(size, MAX_PAGE_SIZE)
-        );
     }
 
     private UUID currentUserId(Jwt jwt) {
